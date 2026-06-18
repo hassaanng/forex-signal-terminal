@@ -1221,10 +1221,12 @@ async function tick(force=false){
     el.chartEmpty.textContent=err.message;
   }
   if(state.running){
-      const delay = SIGNAL_TICK_MS;
-      state.nextEventType = "signal";
-      state.nextAt = Date.now() + delay;
+      if(state.lastFetchAt){
+        state.nextEventType = "signal";
+        state.nextAt = state.lastFetchAt + state.refresh * 1000;
+      }
       updateCountdown();
+      const delay = SIGNAL_TICK_MS;
       state.pollTimer = setTimeout(()=>tick(false), delay);
     }
 }
