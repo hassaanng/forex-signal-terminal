@@ -397,6 +397,7 @@ const state = {
   refresh:60, pollTimer:null, countTimer:null, clockTimer:null, nextAt:null, nextEventType:"refresh",
   autoBacktest:false, autoAiLearning:false, autoBacktestTimer:null, backtestRunning:false,
   markers:[], lastClose:null, lastCandleTime:null, nextCandleAt:null, candleDuration:null,
+  nextCandleRetryAt:null, nextCandleRetryCount:0, renderedSignalResult:null,
   signalGeneratedAt:null, lastSignal:null, lastSignalCandle:null, pendingSignal:null,
   lastFetchAt:null, currentCandles:null, lastFetchSymbol:null, lastFetchInterval:null,
 };
@@ -431,6 +432,15 @@ function formatCountdown(ms){
   const secs = seconds % 60;
   return `${mins.toString().padStart(2,"0")}:${secs.toString().padStart(2,"0")}`;
 }
+function getNextRefreshAt(){
+  return state.lastFetchAt ? state.lastFetchAt + state.refresh * 1000 : Date.now();
+}
+function getNextPollAt(){
+  const refreshAt = getNextRefreshAt();
+  const candleAt = state.nextCandleAt || Infinity;
+  const retryAt = state.nextCandleRetryAt || Infinity;
+  return Math.min(refreshAt, candleAt, retryAt);
+}
 function updateRefreshCountdown(){
   if(!state.running){
     el.next.textContent = "Paused";
@@ -445,12 +455,17 @@ function updateRefreshCountdown(){
   el.next.textContent = `${label} in ${seconds}s`;
 }
 function updateNextCandleCountdown(){
-  if(!state.nextAt||!state.running){
-    el.nextCandleCountdown.textContent = "Next refresh in —:—";
+  if(!state.running || !state.nextCandleAt){
+    el.nextCandleCountdown.textContent = "Next candle in —:—";
     return;
   }
-  const remaining = state.nextAt - Date.now();
-  el.nextCandleCountdown.textContent = `Next signal in ${formatCountdown(remaining)}`;
+  const now = Date.now();
+  if(now < state.nextCandleAt){
+    el.nextCandleCountdown.textContent = `Next candle in ${formatCountdown(state.nextCandleAt - now)}`;
+    return;
+  }
+  const delayed = Math.max(0, Math.ceil((now - state.nextCandleAt) / 1000));
+  el.nextCandleCountdown.textContent = `Waiting for next candle… delayed ${delayed}s`;
 }
 function formatAge(ms){
   if(ms==null||ms<0) return "—";
@@ -490,6 +505,35 @@ function updateLiveCandleInfo(){
 function updateCountdown(){
   updateRefreshCountdown();
   updateNextCandleCountdown();
+}
+
+function renderSignalPanel(r){
+  el.chartEmpty.style.display="none";
+  const cls=r.signal==="BUY"?"buy":"sell";
+  const emo=r.signal==="BUY"?"🟢":"🔴";
+  el.signal.className="signal "+cls;
+  el.signal.querySelector(".emo").textContent=emo;
+  el.signal.querySelector(".lbl").textContent=r.signal;
+  const statusText = `${r.strength} · ${r.confidenceBucket} confidence · ${r.confidence}%`;
+  el.signal.querySelector(".sub").textContent=statusText;
+  const items=[];
+  r.vetoes.forEach(v=>items.push(`<li class="veto">⚠ ${v}</li>`));
+  r.reasons.forEach(x=>items.push(`<li>${x}</li>`));
+  el.reasons.innerHTML=items.join("")||"<li>No factors triggered.</li>";
+}
+function renderMetrics(r){
+  setMetric(el.m.price,fmt(r.price));
+  setMetric(el.m.trend,trendArrow(r.trend),r.trend==="bullish"?"bull":r.trend==="bearish"?"bear":"");
+  setMetric(el.m.conf,r.confidence+"%",r.confidence>=81?"bull":"");
+  setMetric(el.m.rsi,r.rsi!=null?r.rsi.toFixed(0):"—",r.rsi>70?"bear":r.rsi<30?"bull":"");
+  setMetric(el.m.macd,r.macdState,r.macdState==="Bullish"?"bull":r.macdState==="Bearish"?"bear":"");
+  setMetric(el.m.buy,r.buyScore+"/100",r.buyScore>=70?"bull":"");
+  setMetric(el.m.sell,r.sellScore+"/100",r.sellScore>=70?"bear":"");
+  setMetric(el.m.risk,r.risk,r.risk==="High"?"bear":r.risk==="Low"?"bull":"");
+  setMetric(el.m.support,fmt(r.support));
+  setMetric(el.m.resistance,fmt(r.resistance));
+  setMetric(el.m.supdist,r.supDist!=null?`${r.supDist.toFixed(2)}%`:"—");
+  setMetric(el.m.resdist,r.resDist!=null?`${r.resDist.toFixed(2)}%`:"—");
 }
 
 function bindElements(){
@@ -1139,12 +1183,16 @@ async function tick(force=false){
   if(!state.running&&!force)return;
   const symbol=activeSymbol();
   const now = Date.now();
+  const pastExpected = state.nextCandleAt && now >= state.nextCandleAt;
+  const retryReady = state.nextCandleRetryAt && now >= state.nextCandleRetryAt;
+  const nextCandleFetch = pastExpected && (!state.nextCandleRetryAt || retryReady);
   const needsFetch = force
     || !state.currentCandles
     || state.lastFetchSymbol !== symbol
     || state.lastFetchInterval !== state.interval
     || !state.lastFetchAt
-    || now - state.lastFetchAt >= state.refresh * 1000;
+    || now - state.lastFetchAt >= state.refresh * 1000
+    || nextCandleFetch;
   try{
     let candles = state.currentCandles;
     if(needsFetch){
@@ -1169,12 +1217,14 @@ async function tick(force=false){
     const lastCandle=candles[candles.length-1];
     const isNewCandle = state.lastCandleTime === null || state.lastCandleTime !== lastCandle.time;
     state.candleDuration = duration;
-    state.lastCandleTime = lastCandle.time;
     state.nextCandleAt = computeNextCandleAt(lastCandle.time, duration);
     const progress = Math.max(0, Math.min(1, (now - lastCandle.time) / duration));
     const readyForSignal = now - lastCandle.time >= Math.max(duration - LIVE_SIGNAL_START_MS, 0);
 
     if(isNewCandle){
+      state.lastCandleTime = lastCandle.time;
+      state.nextCandleRetryCount = 0;
+      state.nextCandleRetryAt = null;
       if(state.autoAiLearning && state.pendingSignal){
         evaluatePendingSignal(lastCandle.close);
         updateAiAssistant();
@@ -1186,32 +1236,34 @@ async function tick(force=false){
     r.progress = Math.round(progress * 100);
     r.readyForSignal = readyForSignal;
 
-    if(state.lastSignal !== r.signal || state.lastSignalCandle !== lastCandle.time){
+    if(isNewCandle){
       state.lastSignal = r.signal;
       state.lastSignalCandle = lastCandle.time;
       state.signalGeneratedAt = Date.now();
-    }
-
-    if(state.autoAiLearning && isNewCandle){
-      const pkt = timeInPkt(lastCandle.time);
-      state.pendingSignal = {
-        symbol, signal:r.signal, entryPrice:lastCandle.close, entryTime:lastCandle.time,
-        sessionName:session(pkt).name, hour:pkt.getHours(), rsiBucket:bucketRsi(r.rsi), regime:regime,
-      };
-    }
-
-    if(isNewCandle){
+      state.renderedSignalResult = r;
       state.markers.push({index:candles.length-1,type:r.signal});
       if(state.markers.length>40)state.markers.shift();
+      render(r);
+    } else {
+      if(!state.renderedSignalResult){
+        state.renderedSignalResult = r;
+        state.lastSignal = r.signal;
+        state.lastSignalCandle = lastCandle.time;
+        state.signalGeneratedAt = Date.now();
+        render(r);
+      }
+      if(state.nextCandleAt && now >= state.nextCandleAt && (!state.nextCandleRetryAt || retryReady)){
+        state.nextCandleRetryCount = Math.min(10, state.nextCandleRetryCount + 1);
+        state.nextCandleRetryAt = Date.now() + (state.nextCandleRetryCount < 10 ? 3000 : 10000);
+        if(state.nextCandleRetryCount <= 10){
+          setStatus(`Waiting for next candle… retry ${state.nextCandleRetryCount}/10`);
+        }
+      }
     }
 
-    if(readyForSignal && (state.lastSignal !== r.signal || state.lastSignalCandle !== lastCandle.time)){
-      state.lastSignal = r.signal;
-      state.lastSignalCandle = lastCandle.time;
-      state.signalGeneratedAt = Date.now();
-    }
-
-    render(r);renderSession(r);renderChart(symbol,r);updateLiveCandleInfo();
+    renderSession(r);
+    renderChart(symbol,r);
+    updateLiveCandleInfo();
     setStatus(`Live · ${prettySymbol(symbol)} · ${state.interval} · ${state.mode} · ${new Date().toLocaleTimeString()}`,true);
   }catch(err){
     setStatus(`Error: ${err.message}`);
@@ -1331,7 +1383,7 @@ function bindUiEvents(){
     el.sourceSeg.querySelectorAll("button").forEach(x=>x.classList.remove("active"));
     b.classList.add("active");state.source=b.dataset.src;
     el.capField.style.display=state.source==="capital"?"block":"none";
-    el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;fillPairs();
+    el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;fillPairs();
     if(state.running){clearTimeout(state.pollTimer);tick();}
   });
   function bindPills(box,prop,attr){
@@ -1341,6 +1393,9 @@ function bindUiEvents(){
       if(prop === "interval"){
         state.lastCandleTime = null;
         state.nextCandleAt = null;
+        state.nextCandleRetryAt = null;
+        state.nextCandleRetryCount = 0;
+        state.renderedSignalResult = null;
       }
       if(state.running){clearTimeout(state.pollTimer);tick();}});
   }
@@ -1354,9 +1409,9 @@ function bindUiEvents(){
   el.autoAi.addEventListener("change",()=>{state.autoAiLearning=el.autoAi.checked;
     localStorage.setItem(AUTO_AI_KEY, state.autoAiLearning);
   });
-  el.pair.addEventListener("change",()=>{el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;updateBadge();
+  el.pair.addEventListener("change",()=>{el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;updateBadge();
     if(state.running){clearTimeout(state.pollTimer);tick();}});
-  el.customPair.addEventListener("change",()=>{state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;if(state.running){clearTimeout(state.pollTimer);tick();}});
+  el.customPair.addEventListener("change",()=>{state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;if(state.running){clearTimeout(state.pollTimer);tick();}});
   el.refreshBtn.addEventListener("click",()=>{if(state.pollTimer)clearTimeout(state.pollTimer);tick(true);});
   el.backtestBtn.addEventListener("click",async()=>{if(state.backtestRunning)return;state.backtestRunning=true;el.backtestBtn.disabled=true;await runBacktest();el.backtestBtn.disabled=false;state.backtestRunning=false;});
   el.capUrl.addEventListener("change",()=>{localStorage.setItem(CAP_URL_KEY, normalizeProxyInput(el.capUrl.value));});
