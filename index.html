@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f17">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Confluence — Forex Signal Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b0f17; --panel:#131a26; --panel-2:#0e1420; --line:#1e2a3a;
+    --text:#e8edf4; --muted:#8a97a8; --faint:#5a6678;
+    --bull:#2ebd85; --bear:#f6465d; --accent:#4aa8ff;
+    --bull-soft:rgba(46,189,133,.12); --bear-soft:rgba(246,70,93,.12);
+    --mono:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --display:"Space Grotesk", -apple-system, system-ui, sans-serif;
+    --body:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    font-family:var(--body); background:var(--ink); color:var(--text);
+    min-height:100vh; padding:16px calc(16px + env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+  }
+  .wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:14px;}
+
+  /* Header */
+  .top{display:flex;align-items:center;gap:12px;padding:4px 2px 2px;}
+  .mark{width:38px;height:38px;border-radius:11px;flex:0 0 auto;
+    background:linear-gradient(150deg,var(--bull),var(--accent));
+    display:grid;place-items:center;box-shadow:0 6px 20px rgba(74,168,255,.18);}
+  .mark svg{width:22px;height:22px;}
+  .top h1{font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:-.2px;line-height:1.05;}
+  .top h1 span{color:var(--accent);}
+  .top p{font-size:11.5px;color:var(--muted);margin-top:1px;}
+  .clock{margin-left:auto;text-align:right;font-family:var(--mono);}
+  .clock b{font-size:14px;font-weight:500;}
+  .clock small{display:block;font-size:10px;color:var(--faint);letter-spacing:.5px;text-transform:uppercase;}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;}
+  .card.tight{padding:12px;}
+
+  label,.eyebrow{display:block;font-size:10px;color:var(--muted);margin-bottom:7px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;}
+
+  /* segmented toggle */
+  .seg{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px;}
+  .seg button{flex:1;border:none;background:transparent;color:var(--muted);font-family:var(--body);
+    font-size:12.5px;font-weight:600;padding:10px 4px;border-radius:8px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .seg button.active{background:var(--accent);color:#06101f;box-shadow:0 2px 8px rgba(74,168,255,.25);}
+  code{font-family:var(--mono);font-size:.92em;background:var(--panel-2);padding:1px 5px;border-radius:4px;border:1px solid var(--line);}
+
+  .field{margin-top:14px;}
+  .auto-options{display:flex;flex-wrap:wrap;gap:12px;}
+  .auto-options label{font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;cursor:pointer;}
+  .auto-options input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+  select,input[type=text]{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:13px 14px;border-radius:10px;font-size:15px;font-family:var(--body);cursor:pointer;}
+  input[type=text]{font-family:var(--mono);letter-spacing:.5px;}
+  select:focus,input:focus{outline:none;border-color:var(--accent);}
+  .hint{font-size:11px;color:var(--faint);margin-top:6px;line-height:1.5;}
+  .hint a{color:var(--accent);text-decoration:none;}
+  .hint a:hover{text-decoration:underline;}
+
+  .pills{display:grid;gap:7px;}
+  .pills.c6{grid-template-columns:repeat(6,1fr);}
+  .pills.c2{grid-template-columns:repeat(2,1fr);}
+  .pill{background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    padding:11px 6px;border-radius:9px;font-size:13px;font-weight:600;font-family:var(--body);cursor:pointer;transition:.12s;}
+  .pill:active{transform:scale(.96);}
+  .pill.active{background:var(--bull-soft);border-color:var(--bull);color:var(--bull);}
+
+  .badge{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;
+    text-transform:uppercase;letter-spacing:1px;vertical-align:middle;margin-left:6px;}
+  .badge.forex{background:rgba(74,168,255,.15);color:var(--accent);}
+  .badge.demo{background:rgba(138,151,168,.15);color:var(--muted);}
+
+  .actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  .btn{padding:15px 8px;border:none;border-radius:12px;font-size:14px;font-weight:700;
+    font-family:var(--body);cursor:pointer;transition:.12s;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--bull);color:#04140d;}
+  .btn-ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--line);}
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .btn:disabled:active{transform:none;}
+
+  /* status */
+  .status{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted);padding:2px 4px;flex-wrap:wrap;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:0 0 auto;}
+  .dot.live{background:var(--bull);box-shadow:0 0 12px rgba(46,189,133,.7);animation:pulse 1.6s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .status .next{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+
+  /* chart */
+  .chart-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+  .chart-head .pair{font-family:var(--display);font-size:18px;font-weight:700;}
+  .chart-head .tf{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;
+    background:var(--panel-2);padding:3px 8px;border-radius:6px;border:1px solid var(--line);}
+  .chart-head .last{margin-left:auto;font-family:var(--mono);font-size:20px;font-weight:700;}
+  .chart-head .chg{font-family:var(--mono);font-size:13px;font-weight:500;}
+  .chg.up{color:var(--bull);} .chg.down{color:var(--bear);}
+  .chart-box{position:relative;width:100%;height:340px;border-radius:10px;overflow:hidden;background:var(--panel-2);border:1px solid var(--line);}
+  #chart{display:block;width:100%;height:100%;touch-action:pan-y;}
+  .chart-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--faint);font-size:13px;text-align:center;padding:20px;}
+  .legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);font-family:var(--mono);}
+  .legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+
+  /* signal + metrics */
+  .row{display:grid;grid-template-columns:1fr 1.4fr;gap:14px;}
+  .signal{display:flex;flex-direction:column;justify-content:center;text-align:center;
+    padding:24px 16px;border-radius:14px;border:2px solid var(--line);background:var(--panel);transition:.3s;}
+  .signal .emo{font-size:34px;line-height:1;}
+  .signal .lbl{font-family:var(--display);font-size:44px;font-weight:700;letter-spacing:2px;margin:8px 0 4px;line-height:1;}
+  .signal .sub{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);}
+  .signal .sub.countdown{margin-top:8px;font-size:12px;color:var(--text);letter-spacing:.8px;}
+  .signal .sub.meta{margin-top:8px;font-size:12px;color:var(--muted);letter-spacing:.8px;}
+  .signal.buy{background:var(--bull-soft);border-color:var(--bull);} .signal.buy .lbl{color:var(--bull);}
+  .signal.sell{background:var(--bear-soft);border-color:var(--bear);} .signal.sell .lbl{color:var(--bear);}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .metric{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px;}
+  .metric .k{font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.8px;font-weight:700;margin-bottom:4px;}
+  .metric .v{font-family:var(--mono);font-size:16px;font-weight:700;word-break:break-word;}
+  .v.bull{color:var(--bull);} .v.bear{color:var(--bear);}
+
+  /* session strip */
+  .strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+  .strip .metric .v{font-size:14px;}
+
+  details{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+  details+details{margin-top:10px;}
+  summary{cursor:pointer;font-size:13.5px;color:var(--text);padding:14px 16px;user-select:none;font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;list-style:none;}
+  summary::-webkit-details-marker{display:none;}
+  summary::after{content:"▾";color:var(--faint);transition:transform .2s;}
+  details[open] summary::after{transform:rotate(180deg);}
+  .reasons{padding:0 14px 14px;list-style:none;display:grid;gap:6px;}
+  .reasons li{padding:10px 12px;background:var(--panel-2);border-radius:8px;font-size:12.5px;color:var(--text);line-height:1.5;}
+  .reasons li.veto{border-left:3px solid var(--bear);color:var(--bear);}
+  .reasons li.good{border-left:3px solid var(--bull);}
+  .bt-grid{padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;color:var(--text);}
+  .bt-grid .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;}
+  .bt-grid .n{font-family:var(--mono);font-weight:700;font-size:16px;margin-top:2px;}
+
+  .error{background:var(--bear-soft);border:1px solid var(--bear);color:#ffb3bd;padding:14px 16px;border-radius:12px;font-size:13px;line-height:1.5;}
+
+  .disclaimer{font-size:11px;color:var(--faint);line-height:1.7;text-align:center;padding:6px 8px;}
+  .disclaimer b{color:var(--muted);}
+
+  @media (max-width:760px){
+    .actions{grid-template-columns:repeat(2,1fr);}
+    .row{grid-template-columns:1fr;}
+    .grid{grid-template-columns:repeat(2,1fr);}
+    .strip{grid-template-columns:repeat(2,1fr);}
+    .pills.c6{grid-template-columns:repeat(3,1fr);}
+    .chart-box{height:280px;}
+  }
+  @media (max-width:420px){
+    body{padding-left:12px;padding-right:12px;}
+    .grid{grid-template-columns:1fr 1fr;}
+    .signal .lbl{font-size:38px;}
+    .chart-head .last{font-size:17px;}
+    .top h1{font-size:17px;}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="top">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#04140d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 17l5-6 4 4 8-9"/><path d="M16 6h4v4"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Confluence <span>·</span> Signal Terminal</h1>
+      <p>Rule-based technical-analysis engine · Crypto + CFD markets · Educational only</p>
+    </div>
+    <div class="clock">
+      <b id="clock-time">—</b>
+      <small id="clock-zone">PKT</small>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card">
+    <span class="eyebrow">Data source</span>
+    <div class="seg" id="source-seg">
+      <button data-src="demo" class="active">Demo</button>
+      <button data-src="capital">Capital.com</button>
+    </div>
+
+    <div class="field" id="cap-field" style="display:none;">
+      <label for="cap-url">Capital.com proxy URL</label>
+      <input type="text" id="cap-url" placeholder="https://capital-proxy.you.workers.dev" autocomplete="off" spellcheck="false">
+      <input type="text" id="cap-token" placeholder="proxy access token" autocomplete="off" spellcheck="false" style="margin-top:10px;">
+      <div class="hint">Your Capital.com key, login &amp; password live in the proxy's secrets — never in this page. Deploy steps are in <b>capital-proxy.js</b>. Find an epic by opening <code>&lt;your-url&gt;/?search=euro&amp;token=…</code> in a browser tab.</div>
+    </div>
+
+    <div class="field">
+      <label for="pair">Pair <span id="pair-badge" class="badge demo">DEMO</span></label>
+      <select id="pair"></select>
+      <div class="field" id="custom-field" style="display:none;margin-top:10px;">
+        <input type="text" id="custom-pair" placeholder="…or type any symbol, e.g. EUR/SEK" autocomplete="off" spellcheck="false">
+        <div class="hint">Capital.com supports majors, crosses, and metals. Use the exact Capital.com epic.</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Timeframe</label>
+      <div class="pills c6" id="tf">
+        <button class="pill" data-tf="1m">1m</button>
+        <button class="pill" data-tf="5m">5m</button>
+        <button class="pill active" data-tf="15m">15m</button>
+        <button class="pill" data-tf="30m">30m</button>
+        <button class="pill" data-tf="1h">1h</button>
+        <button class="pill" data-tf="4h">4h</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Confirmation mode</label>
+      <div class="pills c2" id="mode">
+        <button class="pill active" data-mode="balanced">Balanced</button>
+        <button class="pill" data-mode="strict">Strict · multi-timeframe</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="refresh">Auto-refresh</label>
+      <select id="refresh">
+        <option value="15">Every 15 sec</option>
+        <option value="30">Every 30 sec</option>
+        <option value="60" selected>Every 60 sec</option>
+        <option value="120">Every 2 min</option>
+        <option value="300">Every 5 min</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Auto tools</label>
+      <div class="auto-options">
+        <label><input type="checkbox" id="auto-backtest"> Auto backtest</label>
+        <label><input type="checkbox" id="auto-ai"> Auto AI learning</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-start">▶ Start</button>
+    <button class="btn btn-ghost" id="btn-stop" disabled>⏸ Stop</button>
+    <button class="btn btn-ghost" id="btn-refresh">↻ Refresh</button>
+    <button class="btn btn-ghost" id="btn-backtest">⚙ Backtest</button>
+  </div>
+
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="status-text">Idle — press Start, or Refresh for a single reading.</span>
+    <span class="next" id="next">Paused</span>
+  </div>
+
+  <!-- Chart (hero) -->
+  <div class="card">
+    <div class="chart-head">
+      <span class="pair" id="ch-pair">—</span>
+      <span class="tf" id="ch-tf">15m</span>
+      <span class="last" id="ch-last">—</span>
+      <span class="chg" id="ch-chg"></span>
+    </div>
+    <div class="chart-box">
+      <canvas id="chart"></canvas>
+      <div class="chart-empty" id="chart-empty">Press Start or Refresh to load live price action.</div>
+    </div>
+    <div class="legend">
+      <span><i style="background:#4aa8ff"></i>EMA 9</span>
+      <span><i style="background:#f0b429"></i>EMA 21</span>
+      <span><i style="background:#8a97a8"></i>EMA 200</span>
+      <span><i style="background:#71c3fa"></i>Support</span>
+      <span><i style="background:#fca3c4"></i>Resistance</span>
+      <span><i style="background:var(--bull)"></i>Buy</span>
+      <span><i style="background:var(--bear)"></i>Sell</span>
+    </div>
+  </div>
+
+  <!-- Signal + metrics -->
+  <div class="row">
+    <div class="signal" id="signal">
+      <div class="emo">⚪</div>
+      <div class="lbl">—</div>
+      <div class="sub">Awaiting first reading</div>
+      <div class="sub countdown" id="next-candle-countdown">Next refresh in —:—</div>
+      <div class="sub meta" id="candle-progress">Progress: —</div>
+      <div class="sub meta" id="time-remaining">Time remaining: —</div>
+      <div class="sub meta" id="signal-generated-at">Signal generated at: —</div>
+      <div class="sub meta" id="signal-age">Signal age: —</div>
+    </div>
+    <div class="grid" id="metrics">
+      <div class="metric"><div class="k">Price</div><div class="v" id="m-price">—</div></div>
+      <div class="metric"><div class="k">Trend</div><div class="v" id="m-trend">—</div></div>
+      <div class="metric"><div class="k">Confidence</div><div class="v" id="m-conf">—</div></div>
+      <div class="metric"><div class="k">RSI 14</div><div class="v" id="m-rsi">—</div></div>
+      <div class="metric"><div class="k">MACD</div><div class="v" id="m-macd">—</div></div>
+      <div class="metric"><div class="k">Buy score</div><div class="v" id="m-buy">—</div></div>
+      <div class="metric"><div class="k">Sell score</div><div class="v" id="m-sell">—</div></div>
+      <div class="metric"><div class="k">Risk</div><div class="v" id="m-risk">—</div></div>
+      <div class="metric"><div class="k">Nearest Support</div><div class="v" id="m-support">—</div></div>
+      <div class="metric"><div class="k">Nearest Resistance</div><div class="v" id="m-resistance">—</div></div>
+      <div class="metric"><div class="k">Distance to Support</div><div class="v" id="m-supdist">—</div></div>
+      <div class="metric"><div class="k">Distance to Resistance</div><div class="v" id="m-resdist">—</div></div>
+    </div>
+  </div>
+
+  <!-- Session strip -->
+  <div class="card tight">
+    <div class="strip">
+      <div class="metric"><div class="k">Session</div><div class="v" id="s-session">—</div></div>
+      <div class="metric"><div class="k">Liquidity</div><div class="v" id="s-liq">—</div></div>
+      <div class="metric"><div class="k">Volatility regime</div><div class="v" id="s-vol">—</div></div>
+      <div class="metric"><div class="k">Volume</div><div class="v" id="s-volu">—</div></div>
+    </div>
+  </div>
+
+  <!-- Details -->
+  <details open id="reasons-box">
+    <summary>Signal breakdown</summary>
+    <ul class="reasons" id="reasons"><li>Run a reading to see how each factor scored.</li></ul>
+  </details>
+
+  <details>
+    <summary>AI Learning Assistant</summary>
+    <div class="bt-grid" id="ai-assistant"><div style="grid-column:1/-1;color:var(--muted);font-size:13px;">The AI assistant learns from past signals and historical backtests to highlight strong hours, assets, sessions, RSI bands and volume regimes. It provides confidence guidance without issuing trades.</div></div>
+  </details>
+
+  <details>
+    <summary>Backtest (last ~500 candles)</summary>
+    <div class="bt-grid" id="backtest"><div style="grid-column:1/-1;color:var(--muted);font-size:13px;">No backtest yet — press Backtest to walk the strategy through recent history on this pair and timeframe.</div></div>
+  </details>
+
+  <div class="disclaimer">
+    <b>Demo mode</b> uses Binance crypto markets (no key, works anywhere). <b>Capital.com</b> uses CFD markets via proxy — note tick volume may differ from spot FX.<br>
+    This is a confluence indicator, not a predictor. No signal is a guarantee. Nothing here is financial advice — trade a demo account first.
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   Confluence — Forex Signal Terminal
+   Honest rebuild: real data, no fake "AI", live bespoke chart.
+   ============================================================ */
+
+// ---------- Pair catalogues ----------
+const DEMO_PAIRS = [
+  ["Crypto majors", [
+    ["BTCUSDT","BTC / USD"],["ETHUSDT","ETH / USD"],["BNBUSDT","BNB / USD"],
+    ["SOLUSDT","SOL / USD"],["XRPUSDT","XRP / USD"],["ADAUSDT","ADA / USD"],
+  ]],
+  ["Forex-shadow (crypto proxy — not true FX)", [
+    ["EURUSDT","EUR / USD ≈"],["GBPUSDT","GBP / USD ≈"],["AUDUSDT","AUD / USD ≈"],
+  ]],
+  ["Metal proxy", [["PAXGUSDT","Gold (PAXG ≈ XAU)"]]],
+];
+// Capital.com epics. If one 404s, find the exact epic via  <your-proxy>/?search=term
+const CAPITAL_PAIRS = [
+  ["Majors", [
+    ["EURUSD","EUR / USD"],["GBPUSD","GBP / USD"],["USDJPY","USD / JPY"],
+    ["USDCHF","USD / CHF"],["USDCAD","USD / CAD"],["AUDUSD","AUD / USD"],["NZDUSD","NZD / USD"],
+  ]],
+  ["Crosses", [
+    ["EURGBP","EUR / GBP"],["EURJPY","EUR / JPY"],["GBPJPY","GBP / JPY"],
+    ["AUDJPY","AUD / JPY"],["EURAUD","EUR / AUD"],["GBPAUD","GBP / AUD"],
+  ]],
+  ["Metals & spot", [["GOLD","Gold"],["SILVER","Silver"]]],
+];
+
+// ---------- State ----------
+const CAP_URL_KEY = "confluence-cap-url";
+const CAP_TOKEN_KEY = "confluence-cap-token";
+const AUTO_BACKTEST_KEY = "confluence-auto-backtest";
+const AUTO_AI_KEY = "confluence-auto-ai";
+const AI_STORAGE_KEY = "confluence-ai-learning-v1";
+const AI_MIN_SAMPLE = 25; // minimum trades before a bucket's win rate is trusted
+const RSI_BUY_THRESHOLD = 60;
+const AUTO_BACKTEST_INTERVAL = 30 * 60000;
+const RSI_SELL_THRESHOLD = 40;
+const state = {
+  running:false, source:"demo", interval:"15m", mode:"balanced",
+  refresh:60, pollTimer:null, countTimer:null, clockTimer:null, nextAt:null, nextEventType:"refresh",
+  autoBacktest:false, autoAiLearning:false, autoBacktestTimer:null, backtestRunning:false,
+  markers:[], lastClose:null, lastCandleTime:null, nextCandleAt:null, candleDuration:null,
+  signalGeneratedAt:null, lastSignal:null, lastSignalCandle:null, pendingSignal:null,
+  lastFetchAt:null, currentCandles:null, lastFetchSymbol:null, lastFetchInterval:null,
+};
+const TF_MS = {"1m":60000,"5m":300000,"15m":900000,"30m":1800000,"1h":3600000,"4h":14400000};
+const LIVE_SIGNAL_START_MS = 10000; // begin live prediction in final 10 seconds of each candle
+const SIGNAL_TICK_MS = 1000;
+const aiLearning = loadAiLearning();
+const $ = id => document.getElementById(id);
+const el = {};
+function normalizeProxyInput(value){
+  if(!value) return "";
+  const trimmed = value.trim();
+  const match = trimmed.match(/^value\s*=\s*["']?(.+?)["']?$/i);
+  return match ? match[1].trim() : trimmed;
+}
+
+function candleDurationMs(candles){
+  if(candles.length >= 2){
+    const last = candles[candles.length-1].time;
+    const prev = candles[candles.length-2].time;
+    const diff = last - prev;
+    if(diff > 0 && diff < (TF_MS[state.interval] || 60000) * 2) return diff;
+  }
+  return TF_MS[state.interval] || 60000;
+}
+function computeNextCandleAt(lastTime,duration){
+  return lastTime + duration;
+}
+function formatCountdown(ms){
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2,"0")}:${secs.toString().padStart(2,"0")}`;
+}
+function updateRefreshCountdown(){
+  if(!state.running){
+    el.next.textContent = "Paused";
+    return;
+  }
+  if(!state.nextAt){
+    el.next.textContent = "refreshing…";
+    return;
+  }
+  const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
+  const label = state.nextEventType === "candle" ? "next candle" : state.nextEventType === "signal" ? "next signal" : "next refresh";
+  el.next.textContent = `${label} in ${seconds}s`;
+}
+function updateNextCandleCountdown(){
+  if(!state.nextAt||!state.running){
+    el.nextCandleCountdown.textContent = "Next refresh in —:—";
+    return;
+  }
+  const remaining = state.nextAt - Date.now();
+  el.nextCandleCountdown.textContent = `Next signal in ${formatCountdown(remaining)}`;
+}
+function formatAge(ms){
+  if(ms==null||ms<0) return "—";
+  const sec = Math.floor(ms/1000);
+  return `${sec}s`;
+}
+function formatPktTime(ts){
+  if(ts==null||Number.isNaN(ts)) return "—";
+  return new Date(ts).toLocaleTimeString("en-US", {
+    hour12:true, hour:"2-digit", minute:"2-digit", second:"2-digit", timeZone:"Asia/Karachi"
+  });
+}
+function updateLiveCandleInfo(){
+  if(!state.running || !state.lastCandleTime || !state.candleDuration){
+    el.candleProgress.textContent = "Progress: —";
+    el.timeRemaining.textContent = "Time remaining: —";
+    el.signalGeneratedAt.textContent = "Signal generated at: —";
+    el.signalAge.textContent = "Signal age: —";
+    return;
+  }
+  const now = Date.now();
+  const elapsed = Math.max(0, Math.min(state.candleDuration, now - state.lastCandleTime));
+  const remaining = Math.max(0, state.nextCandleAt - now);
+  const progressed = Math.min(100, Math.round((elapsed / state.candleDuration) * 100));
+  const currentSec = Math.floor(elapsed / 1000);
+  const totalSec = Math.round(state.candleDuration / 1000);
+  el.candleProgress.textContent = `Progress: ${progressed}% (${currentSec}s / ${totalSec}s)`;
+  el.timeRemaining.textContent = `Time remaining: ${Math.ceil(remaining/1000)}s`;
+  if(state.signalGeneratedAt){
+    el.signalGeneratedAt.textContent = `Signal generated at: ${formatPktTime(state.signalGeneratedAt)} PKT`;
+    el.signalAge.textContent = `Signal age: ${formatAge(now - state.signalGeneratedAt)}`;
+  } else {
+    el.signalGeneratedAt.textContent = "Signal generated at: —";
+    el.signalAge.textContent = "Signal age: —";
+  }
+}
+function updateCountdown(){
+  updateRefreshCountdown();
+  updateNextCandleCountdown();
+}
+
+function bindElements(){
+  Object.assign(el, {
+    sourceSeg:$("source-seg"),
+    capField:$("cap-field"), capUrl:$("cap-url"), capToken:$("cap-token"),
+    pair:$("pair"), pairBadge:$("pair-badge"), customField:$("custom-field"), customPair:$("custom-pair"),
+    tf:$("tf"), mode:$("mode"), refresh:$("refresh"),
+    autoBacktest:$("auto-backtest"), autoAi:$("auto-ai"),
+    start:$("btn-start"), stop:$("btn-stop"), refreshBtn:$("btn-refresh"), backtestBtn:$("btn-backtest"),
+    dot:$("dot"), statusText:$("status-text"), next:$("next"), nextCandleCountdown:$("next-candle-countdown"),
+    candleProgress:$("candle-progress"), timeRemaining:$("time-remaining"), signalGeneratedAt:$("signal-generated-at"), signalAge:$("signal-age"),
+    chPair:$("ch-pair"), chTf:$("ch-tf"), chLast:$("ch-last"), chChg:$("ch-chg"),
+    chartEmpty:$("chart-empty"),
+    signal:$("signal"), reasons:$("reasons"), reasonsBox:$("reasons-box"), backtest:$("backtest"), aiAssistant:$("ai-assistant"),
+    clockTime:$("clock-time"),
+    m:{price:$("m-price"),trend:$("m-trend"),conf:$("m-conf"),rsi:$("m-rsi"),macd:$("m-macd"),buy:$("m-buy"),sell:$("m-sell"),risk:$("m-risk"),support:$("m-support"),resistance:$("m-resistance"),supdist:$("m-supdist"),resdist:$("m-resdist")},
+    s:{session:$("s-session"),liq:$("s-liq"),vol:$("s-vol"),volu:$("s-volu")},
+  });
+}
+
+// ---------- Pair list rendering ----------
+function fillPairs(){
+  const groups = state.source === "capital" ? CAPITAL_PAIRS : DEMO_PAIRS;
+  el.pair.innerHTML = groups.map(([label, items]) =>
+    `<optgroup label="${label}">${items.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</optgroup>`
+  ).join("");
+  const custom = state.source === "capital";
+  el.customField.style.display = custom ? "block" : "none";
+  el.customPair.placeholder = "…or type any Capital.com epic, e.g. EURNZD";
+  updateBadge();
+}
+function activeSymbol(){
+  const custom = state.source === "capital";
+  if (custom && el.customPair.value.trim())
+    return el.customPair.value.trim().toUpperCase().replace(/\s+/g,"");
+  return el.pair.value;
+}
+function loadAiLearning(){
+  try{
+    const json = localStorage.getItem(AI_STORAGE_KEY);
+    if(json) return JSON.parse(json);
+  }catch(_){}
+  return defaultAiLearning();
+}
+function defaultAiLearning(){
+  return {
+    symbols:{}, hours:{}, sessions:{}, rsiRanges:{}, volumeRegimes:{}, outcomes:{BUY:0,SELL:0},
+    trades:0, wins:0, lastUpdated:new Date().toISOString(),
+  };
+}
+function saveAiLearning(){
+  aiLearning.lastUpdated = new Date().toISOString();
+  try{localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(aiLearning));}catch(_){ }
+}
+function timeInPkt(ts){
+  return new Date(new Date(ts).toLocaleString("en-US",{timeZone:"Asia/Karachi"}));
+}
+function bucketRsi(value){
+  if(value==null||Number.isNaN(value))return"unknown";
+  const floor=Math.floor(value/10)*10;
+  return `${floor}-${floor+9}`;
+}
+function describeAiResult(win){return win?"win":"loss";}
+function recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, outcome, win){
+  const delta = win?1:0;
+  const recordKey = (key,obj)=>{obj[key] = obj[key]||{trades:0,wins:0};obj[key].trades++;obj[key].wins+=delta;};
+  if(symbol) recordKey(symbol, aiLearning.symbols);
+  if(typeof hour==="number") recordKey(hour, aiLearning.hours);
+  if(sessionName) recordKey(sessionName, aiLearning.sessions);
+  if(rsiBucket) recordKey(rsiBucket, aiLearning.rsiRanges);
+  if(regime) recordKey(regime, aiLearning.volumeRegimes);
+  aiLearning.outcomes[outcome] = (aiLearning.outcomes[outcome]||0)+1;
+  aiLearning.trades++;
+  if(win) aiLearning.wins++;
+}
+function bucketWinRate(obj,key){
+  const entry = obj && obj[key];
+  if(!entry || entry.trades < AI_MIN_SAMPLE) return null;
+  return entry.wins / entry.trades;
+}
+function calculateConfidenceBase({signal,trend,emaBull,emaBear,macdBull,macdBear,r,volBull,volBear,hasVol,pat,srEvents,nearSupport,nearResistance,higherAgree}){
+  const isBuy = signal === "BUY";
+  const directionMatch = isBuy ? emaBull : emaBear;
+  const macdMatch = isBuy ? macdBull : macdBear;
+  const macdConflict = isBuy ? macdBear : macdBull;
+  const trendMatch = isBuy ? trend === "bullish" : trend === "bearish";
+  const trendConflict = isBuy ? trend === "bearish" : trend === "bullish";
+  const rsiMatch = r !== null && (isBuy ? r > RSI_BUY_THRESHOLD : r < RSI_SELL_THRESHOLD);
+  const volMatch = hasVol && (isBuy ? volBull : volBear);
+  const paMatch = pat.bias === (isBuy ? "bullish" : "bearish");
+  const srMatch = isBuy ? (srEvents.breakout || srEvents.supportBounce) : (srEvents.breakdown || srEvents.resistanceRejection);
+  const zoneMatch = isBuy ? nearSupport : nearResistance;
+
+  let base = 16;
+  base += directionMatch ? 14 : 0;
+  base += trendMatch ? 10 : 0;
+  base += trendConflict ? -10 : 0;
+  base += macdMatch ? 11 : 0;
+  base += macdConflict ? -9 : 0;
+  base += rsiMatch ? 10 : 0;
+  base += volMatch ? 8 : 0;
+  base += paMatch ? 6 : 0;
+  base += srMatch ? 7 : 0;
+  base += zoneMatch ? 4 : 0;
+  base += higherAgree ? 10 : 0;
+  base += flatTrend ? -10 : 0;
+  base += !hasVol ? -4 : 0;
+  base += r === null ? -3 : 0;
+  return Math.max(8, Math.min(96, base));
+}
+function getAiSignalAdjustment(symbol, sessionName, hour, rsiBucket, regime){
+  const bucketBonus = (rate, good, bad) => {
+    if(rate === null) return 0;
+    if(rate >= 0.60) return good;
+    if(rate <= 0.44) return -bad;
+    return 0;
+  };
+  let bonus = 0;
+  bonus += bucketBonus(bucketWinRate(aiLearning.symbols, symbol), 4, 2);
+  bonus += bucketBonus(bucketWinRate(aiLearning.sessions, sessionName), 3, 1.5);
+  bonus += bucketBonus(bucketWinRate(aiLearning.hours, hour), 2, 1);
+  bonus += bucketBonus(bucketWinRate(aiLearning.rsiRanges, rsiBucket), 2, 1);
+  bonus += bucketBonus(bucketWinRate(aiLearning.volumeRegimes, regime), 2, 1);
+  if(aiLearning.trades >= 50){
+    const overall = aiLearning.wins / aiLearning.trades;
+    bonus += overall >= 0.57 ? 3 : overall <= 0.43 ? -3 : 0;
+  }
+  return Math.max(-8, Math.min(16, Math.round(bonus * 10) / 10));
+}
+function renderAiAssistant(){
+  const last = aiLearning.lastUpdated?`Updated ${new Date(aiLearning.lastUpdated).toLocaleString()}`:"No AI history yet.";
+  const best = (obj,max)=>Object.entries(obj)
+    .filter(([,v])=>v.trades>=AI_MIN_SAMPLE)
+    .map(([k,v])=>({label:k,winRate:v.wins/v.trades, trades:v.trades}))
+    .sort((a,b)=>b.winRate-a.winRate || b.trades-a.trades)
+    .slice(0,max);
+  const bestSymbols = best(aiLearning.symbols,3);
+  const bestHours = best(aiLearning.hours,3);
+  const bestSessions = best(aiLearning.sessions,3);
+  const bestRsi = best(aiLearning.rsiRanges,3);
+  const bestVol = best(aiLearning.volumeRegimes,3);
+  const items = [];
+  items.push(`<div style="grid-column:1/-1;color:var(--faint);font-size:12px;margin-bottom:6px;">${last}. ${aiLearning.trades} trade records learned. Best buckets shown only when they have ${AI_MIN_SAMPLE}+ recorded trades.</div>`);
+  if(bestSymbols.length) items.push(`<div class="k">Best assets</div><div class="n">${bestSymbols.map(x=>`${x.label} (${(x.winRate*100).toFixed(0)}%, ${x.trades})`).join(" · ")}</div>`);
+  if(bestHours.length) items.push(`<div class="k">Top PKT hours</div><div class="n">${bestHours.map(x=>`${x.label}: ${(x.winRate*100).toFixed(0)}%`).join(" · ")}</div>`);
+  if(bestSessions.length) items.push(`<div class="k">Best sessions</div><div class="n">${bestSessions.map(x=>`${x.label}: ${(x.winRate*100).toFixed(0)}%`).join(" · ")}</div>`);
+  if(bestRsi.length) items.push(`<div class="k">Best RSI ranges</div><div class="n">${bestRsi.map(x=>`${x.label}: ${(x.winRate*100).toFixed(0)}%`).join(" · ")}</div>`);
+  if(bestVol.length) items.push(`<div class="k">Best volume regimes</div><div class="n">${bestVol.map(x=>`${x.label}: ${(x.winRate*100).toFixed(0)}%`).join(" · ")}</div>`);
+  if(!bestSymbols.length && !bestHours.length && !bestSessions.length && !bestRsi.length && !bestVol.length){
+    items.push(`<div style="grid-column:1/-1;color:var(--muted);font-size:12px;">Backtest more historical trades to bootstrap the AI learning assistant.</div>`);
+  }
+  el.aiAssistant.innerHTML = items.map(i=>`<div>${i}</div>`).join("");
+}
+function prettyAiOutcome(name,stats){return `${name} ${(stats.wins/stats.trades*100).toFixed(0)}% (${stats.trades})`;}
+function updateAiAssistant(){renderAiAssistant();}
+function updateBadge(){
+  const b = el.pairBadge;
+  if (state.source === "capital"){ b.textContent="CAPITAL"; b.className="badge forex"; }
+  else { b.textContent="DEMO"; b.className="badge demo"; }
+}
+
+// ---------- Indicators ----------
+function ema(v,p){const k=2/(p+1);const o=[v[0]];for(let i=1;i<v.length;i++)o.push(v[i]*k+o[i-1]*(1-k));return o;}
+function rsi(v,p=14){const o=new Array(v.length).fill(null);if(v.length<p+1)return o;let g=0,l=0;
+  for(let i=1;i<=p;i++){const d=v[i]-v[i-1];if(d>0)g+=d;else l-=d;}g/=p;l/=p;
+  o[p]=100-100/(1+g/(l||1e-9));
+  for(let i=p+1;i<v.length;i++){const d=v[i]-v[i-1];const gi=d>0?d:0,lo=d<0?-d:0;
+    g=(g*(p-1)+gi)/p;l=(l*(p-1)+lo)/p;o[i]=100-100/(1+g/(l||1e-9));}return o;}
+function macd(v,f=12,s=26,sg=9){const ef=ema(v,f),es=ema(v,s);const line=v.map((_,i)=>ef[i]-es[i]);return {line,sig:ema(line,sg)};}
+function atr(c,p=14){const tr=[0];for(let i=1;i<c.length;i++){const a=c[i],b=c[i-1];
+  tr.push(Math.max(a.high-a.low,Math.abs(a.high-b.close),Math.abs(a.low-b.close)));}return ema(tr,p);}
+function volRatios(c,p=20){return c.map((x,i)=>{if(i<p)return null;let s=0;for(let j=i-p;j<i;j++)s+=c[j].volume;const a=s/p;return a>0?x.volume/a:null;});}
+function detectTrend(c){const cl=c.map(x=>x.close);const e9=ema(cl,9),e21=ema(cl,21),e200=ema(cl,200);const i=cl.length-1;
+  if(e9[i]>e21[i]&&e21[i]>e200[i])return"bullish";if(e9[i]<e21[i]&&e21[i]<e200[i])return"bearish";return"neutral";}
+function computeTrend(c){if(c.length<200)return"neutral";const cl=c.map(x=>x.close);const e20=ema(cl,20),e50=ema(cl,50),e200=ema(cl,200);const i=cl.length-1;
+  if(e20[i]>e50[i]&&e50[i]>e200[i])return"bullish";if(e20[i]<e50[i]&&e50[i]<e200[i])return"bearish";return"neutral";}
+
+function candlestick(c,i){if(i<1)return{name:"none",bias:"neutral"};const x=c[i],p=c[i-1];
+  const body=Math.abs(x.close-x.open),range=x.high-x.low;if(range===0)return{name:"none",bias:"neutral"};
+  const up=x.high-Math.max(x.close,x.open),lo=Math.min(x.close,x.open)-x.low,br=body/range;
+  if(br<0.1)return{name:"doji",bias:"neutral"};
+  if(lo>2*body&&up<body&&x.close>=x.open)return{name:"hammer",bias:"bullish"};
+  if(up>2*body&&lo<body&&x.close<=x.open)return{name:"shooting star",bias:"bearish"};
+  if(p.close<p.open&&x.close>x.open&&x.close>=p.open&&x.open<=p.close)return{name:"bullish engulfing",bias:"bullish"};
+  if(p.close>p.open&&x.close<x.open&&x.open>=p.close&&x.close<=p.open)return{name:"bearish engulfing",bias:"bearish"};
+  if(br>0.8&&x.close>x.open)return{name:"strong bull candle",bias:"bullish"};
+  if(br>0.8&&x.close<x.open)return{name:"strong bear candle",bias:"bearish"};
+  return{name:"none",bias:"neutral"};}
+function swings(c,l=3,r=3){const H=[],L=[];for(let i=l;i<c.length-r;i++){let h=true,lw=true;
+  for(let j=i-l;j<=i+r;j++){if(j===i)continue;if(c[j].high>c[i].high)h=false;if(c[j].low<c[i].low)lw=false;}
+  if(h)H.push({i,price:c[i].high});if(lw)L.push({i,price:c[i].low});}return{H,L};}
+function clusterLevels(levels,tolerance=0.003){const clusters=[];
+  levels.slice().sort((a,b)=>a-b).forEach(price=>{
+    const match=clusters.find(cl=>Math.abs(price-cl.center)/cl.center<=tolerance);
+    if(match){match.prices.push(price);match.center=match.prices.reduce((sum,v)=>sum+v,0)/match.prices.length;}
+    else clusters.push({center:price,prices:[price]});
+  });
+  return clusters.sort((a,b)=>b.prices.length-a.prices.length||a.center-b.center);
+}
+function supportResistance(c,lb=120){const sub=c.slice(-lb);const {H,L}=swings(sub);const last=c[c.length-1].close;
+  const resLevels=H.filter(h=>h.price>last).map(h=>h.price);
+  const supLevels=L.filter(l=>l.price<last).map(l=>l.price);
+  const resClusters=clusterLevels(resLevels,0.0025);
+  const supClusters=clusterLevels(supLevels,0.0025);
+  const nearestResistance=resClusters.length?resClusters.reduce((best,cl)=>Math.min(best,cl.center),Infinity):null;
+  const nearestSupport=supClusters.length?supClusters.reduce((best,cl)=>Math.max(best,cl.center),-Infinity):null;
+  const majorResistance=resClusters.length?resClusters[0].center:nearestResistance;
+  const majorSupport=supClusters.length?supClusters[0].center:nearestSupport;
+  const resistanceZone=resClusters.length?{low:Math.min(...resClusters[0].prices),high:Math.max(...resClusters[0].prices),count:resClusters[0].prices.length}:null;
+  const supportZone=supClusters.length?{low:Math.min(...supClusters[0].prices),high:Math.max(...supClusters[0].prices),count:supClusters[0].prices.length}:null;
+  return{
+    support:nearestSupport,resistance:nearestResistance,
+    majorSupport:majorSupport,majorResistance:majorResistance,
+    supportZone:supportZone,resistanceZone:resistanceZone,
+  };
+}
+function detectSrEvents(c,sr){const last=c[c.length-1],prev=c[c.length-2];
+  const supDist=sr.support?(last.close-sr.support)/last.close:Infinity;
+  const resDist=sr.resistance?(sr.resistance-last.close)/last.close:Infinity;
+  const supportBounce=sr.support && prev.low<sr.support*1.001 && last.close>prev.close && last.low>=sr.support*0.998;
+  const resistanceRejection=sr.resistance && prev.high>sr.resistance*0.999 && last.close<prev.close && last.high<=sr.resistance*1.002;
+  const breakout=sr.resistance && last.close>sr.resistance && last.close>prev.close;
+  const breakdown=sr.support && last.close<sr.support && last.close<prev.close;
+  return{supportBounce,resistanceRejection,breakout,breakdown,supDist,resDist};}
+
+// ---------- Volatility regime (honest replacement for "news") ----------
+function volatilityRegime(c,hasVol){
+  if(!hasVol) return "Calm";
+  const vr=volRatios(c,20);
+  const i=c.length-1;
+  const volRatio=vr[i];
+  if(volRatio!==null&&volRatio>1.8) return "Elevated";
+  if(volRatio!==null&&volRatio>1.3) return "Active";
+  return "Calm";
+}
+
+// ---------- Data layer ----------
+async function fetchCandles(symbol,interval,limit){
+  if(state.source==="capital")return fetchCapital(symbol,interval,limit);
+  return fetchBinance(symbol,interval,limit);
+}
+async function fetchCapital(symbol,interval,limit){
+  const proxyValue = normalizeProxyInput(el.capUrl.value);
+  const tok = normalizeProxyInput(el.capToken.value);
+  if(!proxyValue || !tok){
+    throw new Error("Enter your proxy URL and token first.");
+  }
+  let proxy = proxyValue;
+  if(!/^https?:\/\//.test(proxy))proxy="https://"+proxy;
+  let u;
+  try{u=new URL(proxy);}catch(_){throw new Error("That proxy URL doesn't look valid.");}
+  u.search = "";
+  u.hash = "";
+  u.searchParams.set("epic",symbol);
+  u.searchParams.set("interval",interval);
+  u.searchParams.set("max",limit);
+  u.searchParams.set("token",tok);
+  const url = u.toString();
+  console.log("Capital proxy request:", url);
+  const r = await fetch(url,{mode:"cors",credentials:"omit"}).catch(e=>{throw new Error(`Fetch failed for ${url}: ${e.message}`);});
+  const j = await r.json().catch(()=>({error:`Proxy returned ${r.status} (not JSON).`}));
+  if(j.error)throw new Error(j.error);
+  if(!j.values||!j.values.length)throw new Error(`No candles for epic "${symbol}". Try the ?search= lookup for the exact epic.`);
+  return j.values.map(v=>({time:+v.time,open:+v.open,high:+v.high,low:+v.low,close:+v.close,volume:+v.volume||0}))
+    .filter(c=>Number.isFinite(c.close)&&Number.isFinite(c.open));
+}
+async function fetchBinance(symbol,interval,limit){
+  const map={PAXGUSDT:"PAXGUSDT"};const api=map[symbol]||symbol;
+  const url=`https://api.binance.com/api/v3/klines?symbol=${api}&interval=${interval}&limit=${limit}`;
+  const r=await fetch(url,{mode:"cors",credentials:"omit"});
+  if(!r.ok)throw new Error(`Binance returned ${r.status}. Try another pair.`);
+  const raw=await r.json();
+  return raw.map(k=>({time:k[0],open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]}));
+}
+function sourceHasVolume(candles){
+  if(state.source==="demo")return true;
+  // Capital.com returns tick volume; demo crypto uses real volume → detect it
+  return candles.some(c=>c.volume>0);
+}
+
+// ---------- Prediction engine ----------
+function predict(candles,opts={}){
+  if(candles.length<210)throw new Error("Not enough history — try a higher timeframe.");
+  const cl=candles.map(c=>c.close);
+  const e9=ema(cl,9),e21=ema(cl,21),e200=ema(cl,200);
+  const rs=rsi(cl,14),{line:mL,sig:mS}=macd(cl),vrArr=volRatios(candles,20);
+  const i=candles.length-1,last=candles[i],r=rs[i];
+  const hasVol=opts.hasVol!==false;
+  const vr=hasVol?vrArr[i]:null;
+  const trend=detectTrend(candles);
+  const emaBull=e9[i]>e21[i]&&e21[i]>e200[i]&&last.close>e200[i];
+  const emaBear=e9[i]<e21[i]&&e21[i]<e200[i]&&last.close<e200[i];
+  const above200=last.close>e200[i],below200=last.close<e200[i];
+  const macdBull=mL[i]>mS[i],macdBear=mL[i]<mS[i];
+  const volBull = hasVol && vr !== null && vr > 1.0 && last.close > candles[i-1].close;
+  const volBear = hasVol && vr !== null && vr > 1.0 && last.close < candles[i-1].close;
+  const sr=supportResistance(candles);
+  const srEvents=detectSrEvents(candles,sr);
+  const resDist=sr.resistance?(sr.resistance-last.close)/last.close:Infinity;
+  const supDist=sr.support?(last.close-sr.support)/last.close:Infinity;
+  const nearSupport=sr.support&&supDist<=0.003;
+  const nearResistance=sr.resistance&&resDist<=0.003;
+
+  const pat=candlestick(candles,i);
+  const emaBuy = emaBull ? 25 : 0;
+  const emaSell = emaBear ? 25 : 0;
+  const macdBuy = macdBull ? 20 : 0;
+  const macdSell = macdBear ? 20 : 0;
+  const rsiBuy = r !== null && r > RSI_BUY_THRESHOLD ? 15 : 0;
+  const rsiSell = r !== null && r < RSI_SELL_THRESHOLD ? 15 : 0;
+  const volBuy = volBull ? 10 : 0;
+  const volSell = volBear ? 10 : 0;
+  const trendBuy = trend === "bullish" ? 12 : trend === "bearish" ? -8 : 0;
+  const trendSell = trend === "bearish" ? 12 : trend === "bullish" ? -8 : 0;
+  const priceBuy = (pat.bias === "bullish" ? 12 : 0) + (srEvents.breakout ? 8 : 0);
+  const priceSell = (pat.bias === "bearish" ? 12 : 0) + (srEvents.breakdown ? 8 : 0);
+  const srBuy = (nearSupport ? 5 : 0) + (srEvents.supportBounce ? 5 : 0);
+  const srSell = (nearResistance ? 5 : 0) + (srEvents.resistanceRejection ? 5 : 0);
+
+  const buyScore = emaBuy + macdBuy + rsiBuy + priceBuy + volBuy + srBuy + trendBuy;
+  const sellScore = emaSell + macdSell + rsiSell + priceSell + volSell + srSell + trendSell;
+
+  const tBuy = Math.max(0, Math.min(100, buyScore));
+  const tSell = Math.max(0, Math.min(100, sellScore));
+  const signal = tBuy > tSell ? "BUY" : tSell > tBuy ? "SELL" : (last.close >= e200[i] ? "BUY" : "SELL");
+
+  const reasons=[];
+  const vetoes=[];
+  reasons.push(trend==="bullish"?"EMA trend is bullish (9>21>200)":trend==="bearish"?"EMA trend is bearish (9<21<200)":"EMA trend is neutral");
+  if(emaBull)reasons.push("EMA bullish confirmation: price above EMA 200");
+  if(emaBear)reasons.push("EMA bearish confirmation: price below EMA 200");
+  reasons.push(macdBull?"MACD is bullish":macdBear?"MACD is bearish":"MACD is neutral");
+  if(r!==null)reasons.push(`RSI 14 at ${r.toFixed(1)} (${r>55?"bullish":r<45?"bearish":"neutral"})`);
+  if(hasVol&&vr!==null)reasons.push(`Volume ${vr.toFixed(2)}× the 20-bar average`);
+  if(!hasVol)reasons.push("Volume not available for this data source");
+  if(sr.support!==null)reasons.push(`Nearest support ≈ ${fmt(sr.support)}`);
+  if(sr.resistance!==null)reasons.push(`Nearest resistance ≈ ${fmt(sr.resistance)}`);
+  if(nearSupport)reasons.push("Price close to support zone");
+  if(srEvents.supportBounce)reasons.push("Support bounce detected");
+  if(nearResistance)reasons.push("Price close to resistance zone");
+  if(srEvents.resistanceRejection)reasons.push("Resistance rejection detected");
+  if(srEvents.breakout)reasons.push("Breakout above resistance");
+  if(srEvents.breakdown)reasons.push("Breakdown below support");
+  if(pat.bias!=="neutral")reasons.push(`Price action pattern: ${pat.name}`);
+
+  if(trend==="neutral"){
+    reasons.push("Market is range-bound; trend confirmation is weak");
+    reasons.push("Flat trend reduces confidence by 10%");
+  }
+  if(hasVol&&vr!==null&&vr<0.7)reasons.push("Volume is below average; momentum may be weak");
+
+  if(signal==="BUY"){
+    if(trend==="bullish") reasons.push("Trend priority favors BUY signals");
+    else if(trend==="bearish") reasons.push("Trend priority favors SELL over BUY");
+  } else if(signal==="SELL"){
+    if(trend==="bearish") reasons.push("Trend priority favors SELL signals");
+    else if(trend==="bullish") reasons.push("Trend priority favors BUY over SELL");
+  }
+  if(macdBull&&signal==="BUY") reasons.push("MACD confirms the BUY signal");
+  if(macdBear&&signal==="SELL") reasons.push("MACD confirms the SELL signal");
+  if(macdBull&&signal==="SELL") reasons.push("MACD conflicts with the SELL signal");
+  if(macdBear&&signal==="BUY") reasons.push("MACD conflicts with the BUY signal");
+
+  let higherAgree=false;
+  if(opts.higherTrend){
+    reasons.push(`Higher timeframe (${opts.htfLabel}) trend: ${trendArrow(opts.higherTrend)}`);
+    higherAgree = opts.higherTrend === trend;
+    if(higherAgree)reasons.push("Higher timeframe confirms direction");
+  }
+
+  const sessionName = session(timeInPkt(last.time)).name;
+  const hour = timeInPkt(last.time).getHours();
+  const rsiBucket = bucketRsi(r);
+  const aiBoost = getAiSignalAdjustment(opts.symbol, sessionName, hour, rsiBucket, opts.regime);
+  const baseScore = Math.max(tBuy, tSell);
+  const scoreBoost = higherAgree ? 5 : 0;
+  const score = Math.max(0, Math.min(100, Math.round(baseScore + scoreBoost)));
+
+  const confidenceBase = calculateConfidenceBase({
+    signal, trend, emaBull, emaBear, macdBull, macdBear, r,
+    volBull, volBear, hasVol, pat, srEvents, nearSupport, nearResistance, higherAgree,
+  });
+  let confidence = Math.max(0, Math.min(100, Math.round(confidenceBase + aiBoost)));
+  if(trend === "neutral") confidence = Math.max(0, Math.round(confidence * 0.90));
+  const confidenceBucket = confidence >= 80 ? "High" : confidence >= 60 ? "Medium" : "Low";
+
+  const adjusted = confidence;
+  let strength="Low confidence signal";
+  if(adjusted>=91) strength = "Very high confidence signal";
+  else if(adjusted>=81) strength = "High confidence signal";
+  else if(adjusted>=71) strength = "Strong signal";
+  else if(adjusted>=61) strength = "Moderate signal";
+  else if(adjusted>=50) strength = "Weak signal";
+  else strength = "Very weak signal";
+
+  const risk="N/A";
+
+  return {signal,strength,confidence:confidence,confidenceBucket,score:score,buyScore:tBuy,sellScore:tSell,aiBoost:aiBoost,
+    price:last.close,trend,rsi:r,
+    macdState:macdBull?"Bullish":macdBear?"Bearish":"Flat",
+    volRatio:vr,hasVol,risk,regime:opts.regime||"Calm",
+    support:sr.support,resistance:sr.resistance,supDist:supDist===Infinity?null:supDist*100,
+    resDist:resDist===Infinity?null:resDist*100,sr:sr,reasons,vetoes,
+    candles};
+}
+
+// ---------- Formatting ----------
+function precisionFor(n){const a=Math.abs(n);if(a>=1000)return 2;if(a>=100)return 3;if(a>=1)return 5;return 6;}
+function fmt(n){if(n==null||Number.isNaN(n))return"—";return n.toFixed(precisionFor(n));}
+function trendArrow(t){return t==="bullish"?"↗ Up":t==="bearish"?"↘ Down":"→ Flat";}
+
+// ============================================================
+//  Bespoke canvas candlestick chart (no external library)
+// ============================================================
+const ChartEngine = (() => {
+  const canvas=$("chart");const ctx=canvas.getContext("2d");
+  let candles=[],e9=[],e21=[],e200=[],markers=[],srData=null,W=0,H=0,dpr=1;
+  let hover=-1;
+  const PAD={l:8,r:62,t:10,b:22};
+  const C={bull:"#2ebd85",bear:"#f6465d",e9:"#4aa8ff",e21:"#f0b429",e200:"#8a97a8",
+    support:"#71c3fa",resistance:"#fca3c4",supportZone:"rgba(113,195,250,.16)",resistanceZone:"rgba(252,163,196,.16)",
+    grid:"rgba(138,151,168,.08)",axis:"#5a6678",text:"#8a97a8",cross:"rgba(232,237,244,.35)"};
+
+  function size(){
+    const rect=canvas.getBoundingClientRect();dpr=window.devicePixelRatio||1;
+    W=rect.width;H=rect.height;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  function setData(c,emas,mk,sr){
+    candles=c;e9=emas.e9;e21=emas.e21;e200=emas.e200;markers=mk||[];srData=sr||null;hover=-1;draw();
+  }
+  function visible(){
+    // fit as many candles as look good; cap to last N
+    const plotW=W-PAD.l-PAD.r;const target=Math.min(candles.length, Math.max(60, Math.floor(plotW/6)));
+    return candles.length-target;
+  }
+  function draw(){
+    if(!W)size();
+    ctx.clearRect(0,0,W,H);
+    if(!candles.length)return;
+    const start=Math.max(0,visible());
+    const view=candles.slice(start);
+    const plotW=W-PAD.l-PAD.r, plotH=H-PAD.t-PAD.b;
+    let lo=Infinity,hi=-Infinity;
+    for(const c of view){lo=Math.min(lo,c.low);hi=Math.max(hi,c.high);}
+    for(let k=start;k<candles.length;k++){
+      for(const arr of [e9,e21,e200]){const v=arr[k];if(v!=null){lo=Math.min(lo,v);hi=Math.max(hi,v);}}
+    }
+    const pad=(hi-lo)*0.08||hi*0.01;lo-=pad;hi+=pad;
+    const n=view.length;const cw=plotW/n;const bw=Math.max(1,Math.min(cw*0.66,11));
+    const X=i=>PAD.l+cw*(i+0.5);
+    const Y=p=>PAD.t+plotH*(1-(p-lo)/(hi-lo));
+
+    // grid + price axis
+    ctx.font="10px "+getMono();ctx.textBaseline="middle";
+    const ticks=5;
+    for(let t=0;t<=ticks;t++){
+      const p=lo+(hi-lo)*t/ticks;const y=Y(p);
+      ctx.strokeStyle=C.grid;ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+plotW,y);ctx.stroke();
+      ctx.fillStyle=C.text;ctx.textAlign="left";ctx.fillText(p.toFixed(precisionFor(p)),PAD.l+plotW+6,y);
+    }
+
+    if(srData){
+      if(srData.supportZone){
+        const yTop=Y(srData.supportZone.high);const yBot=Y(srData.supportZone.low);
+        ctx.fillStyle=C.supportZone;ctx.fillRect(PAD.l,yTop,plotW,yBot-yTop);
+      }
+      if(srData.resistanceZone){
+        const yTop=Y(srData.resistanceZone.high);const yBot=Y(srData.resistanceZone.low);
+        ctx.fillStyle=C.resistanceZone;ctx.fillRect(PAD.l,yTop,plotW,yBot-yTop);
+      }
+      if(srData.support){
+        const y=Y(srData.support);ctx.strokeStyle=C.support;ctx.setLineDash([4,4]);
+        ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+plotW,y);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle=C.support;ctx.textAlign="right";ctx.fillText(`SUP ${fmt(srData.support)}`,PAD.l+plotW, y-8);
+      }
+      if(srData.resistance){
+        const y=Y(srData.resistance);ctx.strokeStyle=C.resistance;ctx.setLineDash([4,4]);
+        ctx.beginPath();ctx.moveTo(PAD.l,y);ctx.lineTo(PAD.l+plotW,y);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle=C.resistance;ctx.textAlign="right";ctx.fillText(`RES ${fmt(srData.resistance)}`,PAD.l+plotW, y-8);
+      }
+    }
+
+    // EMA lines
+    line(e200,start,X,Y,C.e200,1.4,start);
+    line(e21,start,X,Y,C.e21,1.4,start);
+    line(e9,start,X,Y,C.e9,1.6,start);
+
+    // candles
+    for(let i=0;i<n;i++){
+      const c=view[i];const x=X(i);const up=c.close>=c.open;
+      ctx.strokeStyle=up?C.bull:C.bear;ctx.fillStyle=up?C.bull:C.bear;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x,Y(c.high));ctx.lineTo(x,Y(c.low));ctx.stroke();
+      const yO=Y(c.open),yC=Y(c.close);const top=Math.min(yO,yC);const h=Math.max(1,Math.abs(yO-yC));
+      ctx.fillRect(x-bw/2,top,bw,h);
+    }
+
+    // markers (buy/sell) — map global index → view index
+    for(const m of markers){
+      const vi=m.index-start;if(vi<0||vi>=n)continue;
+      const c=view[vi];const x=X(vi);const buy=m.type==="BUY";
+      const y=buy?Y(c.low)+14:Y(c.high)-14;
+      ctx.fillStyle=buy?C.bull:C.bear;
+      ctx.beginPath();
+      if(buy){ctx.moveTo(x,y-7);ctx.lineTo(x-5,y+3);ctx.lineTo(x+5,y+3);}
+      else{ctx.moveTo(x,y+7);ctx.lineTo(x-5,y-3);ctx.lineTo(x+5,y-3);}
+      ctx.closePath();ctx.fill();
+    }
+
+    // last price line
+    const lastP=view[n-1].close;const ly=Y(lastP);const lup=view[n-1].close>=view[n-1].open;
+    ctx.strokeStyle=lup?C.bull:C.bear;ctx.setLineDash([3,3]);ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(PAD.l,ly);ctx.lineTo(PAD.l+plotW,ly);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=lup?C.bull:C.bear;ctx.fillRect(PAD.l+plotW,ly-8,PAD.r-2,16);
+    ctx.fillStyle="#06101f";ctx.textAlign="left";ctx.fillText(lastP.toFixed(precisionFor(lastP)),PAD.l+plotW+5,ly);
+
+    // crosshair + tooltip
+    if(hover>=0&&hover<n){
+      const c=view[hover];const x=X(hover);
+      ctx.strokeStyle=C.cross;ctx.setLineDash([2,3]);
+      ctx.beginPath();ctx.moveTo(x,PAD.t);ctx.lineTo(x,PAD.t+plotH);ctx.stroke();ctx.setLineDash([]);
+      const t=`O ${fmt(c.open)}  H ${fmt(c.high)}  L ${fmt(c.low)}  C ${fmt(c.close)}`;
+      ctx.font="10px "+getMono();const tw=ctx.measureText(t).width+14;
+      let tx=x-tw/2;tx=Math.max(PAD.l,Math.min(tx,PAD.l+plotW-tw));
+      ctx.fillStyle="rgba(11,15,23,.92)";ctx.strokeStyle=C.axis;
+      ctx.fillRect(tx,PAD.t+2,tw,18);ctx.strokeRect(tx,PAD.t+2,tw,18);
+      ctx.fillStyle="#e8edf4";ctx.textAlign="left";ctx.fillText(t,tx+7,PAD.t+11);
+    }
+  }
+  function line(arr,start,X,Y,color,w){
+    ctx.strokeStyle=color;ctx.lineWidth=w;ctx.beginPath();let began=false;
+    for(let k=start;k<arr.length;k++){const v=arr[k];if(v==null)continue;const x=X(k-start),y=Y(v);
+      if(!began){ctx.moveTo(x,y);began=true;}else ctx.lineTo(x,y);}ctx.stroke();
+  }
+  function getMono(){return 'var(--mono)'.includes('var')?'"JetBrains Mono",monospace':'monospace';}
+
+  function onMove(clientX){
+    const rect=canvas.getBoundingClientRect();const x=clientX-rect.left;
+    const start=Math.max(0,visible());const n=candles.length-start;
+    const plotW=W-PAD.l-PAD.r;const cw=plotW/n;
+    hover=Math.round((x-PAD.l)/cw-0.5);draw();
+  }
+  canvas.addEventListener("mousemove",e=>onMove(e.clientX));
+  canvas.addEventListener("mouseleave",()=>{hover=-1;draw();});
+  canvas.addEventListener("touchstart",e=>{if(e.touches[0])onMove(e.touches[0].clientX);},{passive:true});
+  canvas.addEventListener("touchmove",e=>{if(e.touches[0])onMove(e.touches[0].clientX);},{passive:true});
+  if(window.ResizeObserver)new ResizeObserver(()=>{size();draw();}).observe(canvas);
+  window.addEventListener("resize",()=>{size();draw();});
+  return {setData,redraw:draw,size};
+})();
+
+// ---------- Render ----------
+function setMetric(node,val,cls){node.textContent=val;node.className="v"+(cls?" "+cls:"");}
+function render(r){
+  el.chartEmpty.style.display="none";
+  const cls=r.signal==="BUY"?"buy":"sell";
+  const emo=r.signal==="BUY"?"🟢":"🔴";
+  el.signal.className="signal "+cls;
+  el.signal.querySelector(".emo").textContent=emo;
+  el.signal.querySelector(".lbl").textContent=r.signal;
+  const statusText = `${r.strength} · ${r.confidenceBucket} confidence · ${r.confidence}%`;
+  el.signal.querySelector(".sub").textContent=statusText;
+
+  setMetric(el.m.price,fmt(r.price));
+  setMetric(el.m.trend,trendArrow(r.trend),r.trend==="bullish"?"bull":r.trend==="bearish"?"bear":"");
+  setMetric(el.m.conf,r.confidence+"%",r.confidence>=81?"bull":"");
+  setMetric(el.m.rsi,r.rsi!=null?r.rsi.toFixed(0):"—",r.rsi>70?"bear":r.rsi<30?"bull":"");
+  setMetric(el.m.macd,r.macdState,r.macdState==="Bullish"?"bull":r.macdState==="Bearish"?"bear":"");
+  setMetric(el.m.buy,r.buyScore+"/100",r.buyScore>=70?"bull":"");
+  setMetric(el.m.sell,r.sellScore+"/100",r.sellScore>=70?"bear":"");
+  setMetric(el.m.risk,r.risk,r.risk==="High"?"bear":r.risk==="Low"?"bull":"");
+  setMetric(el.m.support,fmt(r.support));
+  setMetric(el.m.resistance,fmt(r.resistance));
+  setMetric(el.m.supdist,r.supDist!=null?`${r.supDist.toFixed(2)}%`:"—");
+  setMetric(el.m.resdist,r.resDist!=null?`${r.resDist.toFixed(2)}%`:"—");
+
+  const items=[];
+  r.vetoes.forEach(v=>items.push(`<li class="veto">⚠ ${v}</li>`));
+  r.reasons.forEach(x=>items.push(`<li>${x}</li>`));
+  el.reasons.innerHTML=items.join("")||"<li>No factors triggered.</li>";
+}
+function renderSession(r){
+  const s=session(pktNow());
+  el.s.session.textContent=s.name;
+  el.s.liq.textContent=s.liquidity;
+  el.s.vol.textContent=r?r.regime:"—";
+  el.s.volu.textContent=r?(r.hasVol?(r.volRatio!=null?r.volRatio.toFixed(2)+"×":"normal"):"N/A (FX)"):"—";
+}
+function renderChart(symbol,r){
+  const c=r.candles;const cl=c.map(x=>x.close);
+  ChartEngine.setData(c,{e9:ema(cl,9),e21:ema(cl,21),e200:ema(cl,200)},state.markers,r.sr);
+  el.chPair.textContent=prettySymbol(symbol);
+  el.chTf.textContent=state.interval;
+  el.chLast.textContent=fmt(r.price);
+  if(state.lastClose!=null){
+    const d=r.price-state.lastClose;const pct=(d/state.lastClose)*100;
+    el.chChg.textContent=`${d>=0?"+":""}${pct.toFixed(2)}%`;
+    el.chChg.className="chg "+(d>=0?"up":"down");
+  }
+}
+function prettySymbol(s){
+  if(s.includes("/"))return s;
+  return s.replace(/USDT$/,"/USD").replace("PAXG/USD","Gold");
+}
+
+// ---------- Sessions (Pakistan time, advisory) ----------
+function pktNow(){return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Karachi"}));}
+function session(pkt){
+  const h=pkt.getHours();
+  if(h<8)return{name:"Asian (quiet)",liquidity:"Low"};
+  if(h<12)return{name:"Asian",liquidity:"Moderate"};
+  if(h<17)return{name:"London",liquidity:"High"};
+  if(h<21)return{name:"London/NY overlap",liquidity:"Peak"};
+  return{name:"New York",liquidity:"High"};
+}
+function tickClock(){
+  if(!el.clockTime) return;
+  el.clockTime.textContent=pktNow().toLocaleTimeString("en-US",{hour12:true,hour:"numeric",minute:"2-digit"});
+}
+
+// ---------- Higher timeframe map ----------
+function higherTf(tf){return {"1m":"15m","5m":"1h","15m":"1h","30m":"4h","1h":"4h","4h":"4h"}[tf]||null;}
+
+// ---------- Main tick ----------
+async function tick(force=false){
+  if(!state.running&&!force)return;
+  const symbol=activeSymbol();
+  const now = Date.now();
+  const needsFetch = force
+    || !state.currentCandles
+    || state.lastFetchSymbol !== symbol
+    || state.lastFetchInterval !== state.interval
+    || !state.lastFetchAt
+    || now - state.lastFetchAt >= state.refresh * 1000;
+  try{
+    let candles = state.currentCandles;
+    if(needsFetch){
+      setStatus(`Fetching ${prettySymbol(symbol)} · ${state.interval}…`);
+      candles = await fetchCandles(symbol,state.interval,500);
+      state.currentCandles = candles;
+      state.lastFetchAt = Date.now();
+      state.lastFetchSymbol = symbol;
+      state.lastFetchInterval = state.interval;
+    }
+    const hasVol=sourceHasVolume(candles);
+    const regime=volatilityRegime(candles,hasVol);
+
+    let higherTrend=null,htfLabel=null;
+    if(state.mode==="strict"){
+      const htf=higherTf(state.interval);
+      if(htf&&htf!==state.interval){
+        try{const hc=await fetchCandles(symbol,htf,250);higherTrend=computeTrend(hc);htfLabel=htf;}catch(_){}
+      }
+    }
+    const now = Date.now();
+    const duration=candleDurationMs(candles);
+    const lastCandle=candles[candles.length-1];
+    const isNewCandle = state.lastCandleTime === null || state.lastCandleTime !== lastCandle.time;
+    state.candleDuration = duration;
+    state.lastCandleTime = lastCandle.time;
+    state.nextCandleAt = computeNextCandleAt(lastCandle.time, duration);
+    const progress = Math.max(0, Math.min(1, (now - lastCandle.time) / duration));
+    const readyForSignal = now - lastCandle.time >= Math.max(duration - LIVE_SIGNAL_START_MS, 0);
+
+    if(isNewCandle){
+      if(state.autoAiLearning && state.pendingSignal){
+        evaluatePendingSignal(lastCandle.close);
+        updateAiAssistant();
+      }
+      state.lastClose = candles.length>1 ? candles[candles.length-2].close : null;
+    }
+
+    const r = predict(candles,{hasVol,regime,higherTrend,htfLabel,symbol});
+    r.progress = Math.round(progress * 100);
+    r.readyForSignal = readyForSignal;
+
+    if(state.lastSignal !== r.signal || state.lastSignalCandle !== lastCandle.time){
+      state.lastSignal = r.signal;
+      state.lastSignalCandle = lastCandle.time;
+      state.signalGeneratedAt = Date.now();
+    }
+
+    if(state.autoAiLearning && isNewCandle){
+      const pkt = timeInPkt(lastCandle.time);
+      state.pendingSignal = {
+        symbol, signal:r.signal, entryPrice:lastCandle.close, entryTime:lastCandle.time,
+        sessionName:session(pkt).name, hour:pkt.getHours(), rsiBucket:bucketRsi(r.rsi), regime:regime,
+      };
+    }
+
+    if(isNewCandle){
+      state.markers.push({index:candles.length-1,type:r.signal});
+      if(state.markers.length>40)state.markers.shift();
+    }
+
+    if(readyForSignal && (state.lastSignal !== r.signal || state.lastSignalCandle !== lastCandle.time)){
+      state.lastSignal = r.signal;
+      state.lastSignalCandle = lastCandle.time;
+      state.signalGeneratedAt = Date.now();
+    }
+
+    render(r);renderSession(r);renderChart(symbol,r);updateLiveCandleInfo();
+    setStatus(`Live · ${prettySymbol(symbol)} · ${state.interval} · ${state.mode} · ${new Date().toLocaleTimeString()}`,true);
+  }catch(err){
+    setStatus(`Error: ${err.message}`);
+    el.reasonsBox.open=true;
+    el.reasons.innerHTML=`<li class="veto">${err.message}</li>`;
+    el.chartEmpty.style.display="grid";
+    el.chartEmpty.textContent=err.message;
+  }
+  if(state.running){
+      const delay = SIGNAL_TICK_MS;
+      state.nextEventType = "signal";
+      state.nextAt = Date.now() + delay;
+      updateCountdown();
+      state.pollTimer = setTimeout(()=>tick(false), delay);
+    }
+}
+function setStatus(t,live){el.statusText.textContent=t;el.dot.classList.toggle("live",!!live);}
+// ---------- Backtest ----------
+async function runBacktest(){
+  const symbol=activeSymbol();
+  el.backtest.innerHTML=`<div style="grid-column:1/-1;color:var(--muted);">Running backtest on ${prettySymbol(symbol)}…</div>`;
+  try{
+    const candles=await fetchCandles(symbol,state.interval,500);
+    const hasVol=sourceHasVolume(candles);
+    if(candles.length<240)throw new Error("Not enough history for a backtest.");
+    let eq=0,maxEq=0,dd=0,wins=0,trades=0,gp=0,gl=0;
+    const records=[];
+    for(let i=210;i<candles.length-1;i++){
+      const win=candles.slice(0,i+1);
+      const regime=volatilityRegime(win,hasVol);
+      const r=predict(win,{hasVol,regime,symbol:symbol});
+      const entry=candles[i].close;
+      const tp=r.signal==="BUY"?entry*1.01:entry*0.99;
+      const sl=r.signal==="BUY"?entry*0.995:entry*1.005;
+      let exit=null;
+      for(let j=i+1;j<candles.length;j++){const c=candles[j];
+        if(r.signal==="BUY"){if(c.low<=sl){exit=sl;break;}if(c.high>=tp){exit=tp;break;}}
+        else{if(c.high>=sl){exit=sl;break;}if(c.low<=tp){exit=tp;break;}}}
+      if(exit==null)exit=candles[candles.length-1].close;
+      const pnl=r.signal==="BUY"?(exit-entry)/entry:(entry-exit)/entry;
+      const winFlag = pnl>0;
+      const pkt = timeInPkt(candles[i].time);
+      records.push({
+        entryTime:candles[i].time,
+        sessionName:session(pkt).name,
+        hour:pkt.getHours(),
+        rsiBucket:bucketRsi(r.rsi),
+        regime:regime,
+        signal:r.signal,
+        win:winFlag,
+      });
+      eq+=pnl;maxEq=Math.max(maxEq,eq);dd=Math.max(dd,maxEq-eq);
+      if(pnl>0){wins++;gp+=pnl;}else gl+=Math.abs(pnl);trades++;
+    }
+    const wr=trades?wins/trades*100:0;
+    const pf=gl>0?gp/gl:(gp>0?Infinity:0);
+    const avg=trades?eq/trades*100:0;
+    if(records.length){
+      const pkt = timeInPkt(candles[0].time);
+      records.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win));
+      saveAiLearning();
+      updateAiAssistant();
+    }
+    el.backtest.innerHTML=`
+      <div><div class="k">Trades</div><div class="n">${trades}</div></div>
+      <div><div class="k">Win rate</div><div class="n">${wr.toFixed(1)}%</div></div>
+      <div><div class="k">Profit factor</div><div class="n">${Number.isFinite(pf)?pf.toFixed(2):"∞"}</div></div>
+      <div><div class="k">Max drawdown</div><div class="n">${(dd*100).toFixed(2)}%</div></div>
+      <div><div class="k">Avg / trade</div><div class="n">${avg.toFixed(2)}%</div></div>
+      <div><div class="k">Net (1% TP / 0.5% SL)</div><div class="n">${(eq*100).toFixed(2)}%</div></div>
+      <div style="grid-column:1/-1;color:var(--faint);font-size:11px;line-height:1.6;">
+        Walk-forward on the last ~500 candles. Frictionless (no spread/slippage), so live results will be worse. A sanity check, not a track record.</div>`;
+  }catch(err){
+    el.backtest.innerHTML=`<div style="grid-column:1/-1;color:#ffb3bd;">${err.message}</div>`;
+  }
+}
+
+function evaluatePendingSignal(closePrice){
+  const pending = state.pendingSignal;
+  if(!pending||pending.entryPrice==null) return;
+  const {entryPrice, signal, symbol, entryTime, sessionName, hour, rsiBucket, regime} = pending;
+  const tp = signal === "BUY" ? entryPrice * 1.01 : entryPrice * 0.99;
+  const sl = signal === "BUY" ? entryPrice * 0.995 : entryPrice * 1.005;
+  const win = signal === "BUY" ? closePrice >= tp : closePrice <= tp;
+  const loss = signal === "BUY" ? closePrice <= sl : closePrice >= sl;
+  const outcome = win ? true : loss ? false : (signal === "BUY" ? closePrice > entryPrice : closePrice < entryPrice);
+  recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome);
+  saveAiLearning();
+  state.pendingSignal = null;
+}
+
+function scheduleAutoBacktest(delay){
+  if(!state.autoBacktest) return;
+  if(state.autoBacktestTimer) clearTimeout(state.autoBacktestTimer);
+  state.autoBacktestTimer = setTimeout(async ()=>{
+    if(!state.running || !state.autoBacktest) return;
+    if(!state.backtestRunning){
+      state.backtestRunning = true;
+      await runBacktest();
+      state.backtestRunning = false;
+    }
+    scheduleAutoBacktest(AUTO_BACKTEST_INTERVAL);
+  }, delay);
+}
+
+function stopAutoBacktest(){
+  if(state.autoBacktestTimer) clearTimeout(state.autoBacktestTimer);
+  state.autoBacktestTimer = null;
+}
+
+// ---------- Bindings ----------
+function bindUiEvents(){
+  el.sourceSeg.addEventListener("click",e=>{
+    const b=e.target.closest("button");if(!b)return;
+    el.sourceSeg.querySelectorAll("button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");state.source=b.dataset.src;
+    el.capField.style.display=state.source==="capital"?"block":"none";
+    el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;fillPairs();
+    if(state.running){clearTimeout(state.pollTimer);tick();}
+  });
+  function bindPills(box,prop,attr){
+    box.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+      box.querySelectorAll("button").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+      state[prop]=b.dataset[attr];el.chTf.textContent=state.interval;state.markers=[];
+      if(prop === "interval"){
+        state.lastCandleTime = null;
+        state.nextCandleAt = null;
+      }
+      if(state.running){clearTimeout(state.pollTimer);tick();}});
+  }
+  bindPills(el.tf,"interval","tf");
+  bindPills(el.mode,"mode","mode");
+  el.refresh.addEventListener("change",()=>{state.refresh=+el.refresh.value||60;
+    if(state.running){clearTimeout(state.pollTimer);tick();}});
+  el.autoBacktest.addEventListener("change",()=>{state.autoBacktest=el.autoBacktest.checked;
+    localStorage.setItem(AUTO_BACKTEST_KEY, state.autoBacktest);
+    if(state.running){ if(state.autoBacktest) scheduleAutoBacktest(3000); else stopAutoBacktest(); }});
+  el.autoAi.addEventListener("change",()=>{state.autoAiLearning=el.autoAi.checked;
+    localStorage.setItem(AUTO_AI_KEY, state.autoAiLearning);
+  });
+  el.pair.addEventListener("change",()=>{el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;updateBadge();
+    if(state.running){clearTimeout(state.pollTimer);tick();}});
+  el.customPair.addEventListener("change",()=>{state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;if(state.running){clearTimeout(state.pollTimer);tick();}});
+  el.refreshBtn.addEventListener("click",()=>{if(state.pollTimer)clearTimeout(state.pollTimer);tick(true);});
+  el.backtestBtn.addEventListener("click",async()=>{if(state.backtestRunning)return;state.backtestRunning=true;el.backtestBtn.disabled=true;await runBacktest();el.backtestBtn.disabled=false;state.backtestRunning=false;});
+  el.capUrl.addEventListener("change",()=>{localStorage.setItem(CAP_URL_KEY, normalizeProxyInput(el.capUrl.value));});
+  el.capToken.addEventListener("change",()=>{localStorage.setItem(CAP_TOKEN_KEY, normalizeProxyInput(el.capToken.value));});
+  el.start.addEventListener("click",()=>{state.running=true;el.start.disabled=true;el.stop.disabled=false;
+    el.dot.classList.add("live");tick();
+    if(state.countTimer)clearInterval(state.countTimer);state.countTimer=setInterval(updateCountdown,500);
+    if(state.autoBacktest) scheduleAutoBacktest(5000);
+  });
+  el.stop.addEventListener("click",()=>{state.running=false;el.start.disabled=false;el.stop.disabled=true;
+    el.dot.classList.remove("live");setStatus("Stopped.");el.next.textContent="Paused";
+    if(state.pollTimer)clearTimeout(state.pollTimer);if(state.countTimer)clearInterval(state.countTimer);
+    stopAutoBacktest();});
+}
+
+// ---------- Init ----------
+function initApp(){
+  bindElements();
+  bindUiEvents();
+  fillPairs();
+  const storedCapUrl = localStorage.getItem(CAP_URL_KEY);
+  const storedCapToken = localStorage.getItem(CAP_TOKEN_KEY);
+  const storedAutoBacktest = localStorage.getItem(AUTO_BACKTEST_KEY);
+  const storedAutoAi = localStorage.getItem(AUTO_AI_KEY);
+  if(storedCapUrl) el.capUrl.value = normalizeProxyInput(storedCapUrl);
+  if(storedCapToken) el.capToken.value = normalizeProxyInput(storedCapToken);
+  if(storedAutoBacktest !== null){ state.autoBacktest = storedAutoBacktest === "true"; el.autoBacktest.checked = state.autoBacktest; }
+  if(storedAutoAi !== null){ state.autoAiLearning = storedAutoAi === "true"; el.autoAi.checked = state.autoAiLearning; }
+  ChartEngine.size();
+  updateAiAssistant();
+  tickClock();
+  if(state.clockTimer) clearInterval(state.clockTimer);
+  state.clockTimer = setInterval(tickClock, 1000);
+}
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', initApp);
+}else{
+  initApp();
+}
+</script>
+</body>
+</html>
