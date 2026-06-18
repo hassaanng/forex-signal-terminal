@@ -738,8 +738,8 @@ function clusterLevels(levels,tolerance=0.003){const clusters=[];
 function supportResistance(c,lb=120){const sub=c.slice(-lb);const {H,L}=swings(sub);const last=c[c.length-1].close;
   const resLevels=H.filter(h=>h.price>last).map(h=>h.price);
   const supLevels=L.filter(l=>l.price<last).map(l=>l.price);
-  const resClusters=clusterLevels(resLevels,0.0025);
-  const supClusters=clusterLevels(supLevels,0.0025);
+  const resClusters=clusterLevels(resLevels,0.0025).filter(cl=>cl.prices.length>=2);
+  const supClusters=clusterLevels(supLevels,0.0025).filter(cl=>cl.prices.length>=2);
   const nearestResistance=resClusters.length?resClusters.reduce((best,cl)=>Math.min(best,cl.center),Infinity):null;
   const nearestSupport=supClusters.length?supClusters.reduce((best,cl)=>Math.max(best,cl.center),-Infinity):null;
   const majorResistance=resClusters.length?resClusters[0].center:nearestResistance;
@@ -843,14 +843,14 @@ function predict(candles,opts={}){
   const rs=rsi(cl,14),{line:mL,sig:mS}=macd(cl),vrArr=volRatios(candles,20);
   const i=candles.length-1,last=candles[i],r=rs[i];
   const hasVol=opts.hasVol!==false;
-  const vr=hasVol?vrArr[i]:null;
+  const volRatio=hasVol?vrArr[i]:null;
   const trend=detectTrend(candles);
   const emaBull=e9[i]>e21[i]&&e21[i]>e200[i]&&last.close>e200[i];
   const emaBear=e9[i]<e21[i]&&e21[i]<e200[i]&&last.close<e200[i];
   const above200=last.close>e200[i],below200=last.close<e200[i];
   const macdBull=mL[i]>mS[i],macdBear=mL[i]<mS[i];
-  const volBull = hasVol && vr !== null && vr > 1.0 && last.close > candles[i-1].close;
-  const volBear = hasVol && vr !== null && vr > 1.0 && last.close < candles[i-1].close;
+  const volBull = hasVol && volRatio !== null && volRatio > 1.0 && last.close > candles[i-1].close;
+  const volBear = hasVol && volRatio !== null && volRatio > 1.0 && last.close < candles[i-1].close;
   const sr=supportResistance(candles);
   const srEvents=detectSrEvents(candles,sr);
   const resDist=sr.resistance?(sr.resistance-last.close)/last.close:Infinity;
@@ -888,7 +888,7 @@ function predict(candles,opts={}){
   if(emaBear)reasons.push("EMA bearish confirmation: price below EMA 200");
   reasons.push(macdBull?"MACD is bullish":macdBear?"MACD is bearish":"MACD is neutral");
   if(r!==null)reasons.push(`RSI 14 at ${r.toFixed(1)} (${r>55?"bullish":r<45?"bearish":"neutral"})`);
-  if(hasVol&&vr!==null)reasons.push(`Volume ${vr.toFixed(2)}× the 20-bar average`);
+  if(hasVol&&volRatio!==null)reasons.push(`Volume ${volRatio.toFixed(2)}× the 20-bar average`);
   if(!hasVol)reasons.push("Volume not available for this data source");
   if(sr.support!==null)reasons.push(`Nearest support ≈ ${fmt(sr.support)}`);
   if(sr.resistance!==null)reasons.push(`Nearest resistance ≈ ${fmt(sr.resistance)}`);
@@ -902,9 +902,9 @@ function predict(candles,opts={}){
 
   if(trend==="neutral"){
     reasons.push("Market is range-bound; trend confirmation is weak");
-    reasons.push("Flat trend reduces confidence by 10%");
+    reasons.push("Neutral trend caps confidence at 60%");
   }
-  if(hasVol&&vr!==null&&vr<0.7)reasons.push("Volume is below average; momentum may be weak");
+  if(hasVol&&volRatio!==null&&volRatio<0.8)reasons.push("Volume is below average; momentum may be weak");
 
   if(signal==="BUY"){
     if(trend==="bullish") reasons.push("Trend priority favors BUY signals");
@@ -937,8 +937,27 @@ function predict(candles,opts={}){
     signal, trend, emaBull, emaBear, macdBull, macdBear, r,
     volBull, volBear, hasVol, pat, srEvents, nearSupport, nearResistance, higherAgree,
   });
-  let confidence = Math.max(0, Math.min(100, Math.round(confidenceBase + aiBoost)));
-  if(trend === "neutral") confidence = Math.max(0, Math.round(confidence * 0.90));
+  const sessionBoost = sessionName === "London/NY overlap" ? 10
+    : sessionName.startsWith("Asian") ? -10
+    : 0;
+  if(sessionBoost > 0) reasons.push("London/New York overlap adds conviction");
+  if(sessionBoost < 0) reasons.push("Asian session reduces conviction");
+
+  let confidence = confidenceBase + aiBoost + sessionBoost;
+  if(hasVol && volRatio !== null && volRatio < 0.8){
+    confidence -= 10;
+    reasons.push("Volume ratio is below 0.8; momentum is weak");
+  }
+  if(r !== null && signal === "SELL" && r < 20){
+    confidence -= 15;
+    reasons.push("Deep oversold RSI weakens SELL conviction");
+  }
+  if(r !== null && signal === "BUY" && r > 80){
+    confidence -= 15;
+    reasons.push("Deep overbought RSI weakens BUY conviction");
+  }
+  confidence = Math.max(0, Math.min(100, Math.round(confidence)));
+  if(trend === "neutral") confidence = Math.min(confidence, 60);
   const confidenceBucket = confidence >= 80 ? "High" : confidence >= 60 ? "Medium" : "Low";
 
   const adjusted = confidence;
@@ -955,7 +974,7 @@ function predict(candles,opts={}){
   return {signal,strength,confidence:confidence,confidenceBucket,score:score,buyScore:tBuy,sellScore:tSell,aiBoost:aiBoost,
     price:last.close,trend,rsi:r,
     macdState:macdBull?"Bullish":macdBear?"Bearish":"Flat",
-    volRatio:vr,hasVol,risk,regime:opts.regime||"Calm",
+    volRatio:volRatio,hasVol,risk,regime:opts.regime||"Calm",
     support:sr.support,resistance:sr.resistance,supDist:supDist===Infinity?null:supDist*100,
     resDist:resDist===Infinity?null:resDist*100,sr:sr,reasons,vetoes,
     candles};
@@ -1203,8 +1222,12 @@ async function tick(force=false){
       state.lastFetchSymbol = symbol;
       state.lastFetchInterval = state.interval;
     }
-    const hasVol=sourceHasVolume(candles);
-    const regime=volatilityRegime(candles,hasVol);
+    const duration=candleDurationMs(candles);
+    const lastCandle=candles[candles.length-1];
+    const isLastCandleForming = now - lastCandle.time < duration;
+    const signalCandles = isLastCandleForming && candles.length > 1 ? candles.slice(0,-1) : candles;
+    const hasVol=sourceHasVolume(signalCandles);
+    const regime=volatilityRegime(signalCandles,hasVol);
 
     let higherTrend=null,htfLabel=null;
     if(state.mode==="strict"){
@@ -1213,8 +1236,6 @@ async function tick(force=false){
         try{const hc=await fetchCandles(symbol,htf,250);higherTrend=computeTrend(hc);htfLabel=htf;}catch(_){}
       }
     }
-    const duration=candleDurationMs(candles);
-    const lastCandle=candles[candles.length-1];
     const isNewCandle = state.lastCandleTime === null || state.lastCandleTime !== lastCandle.time;
     state.candleDuration = duration;
     state.nextCandleAt = computeNextCandleAt(lastCandle.time, duration);
@@ -1232,7 +1253,8 @@ async function tick(force=false){
       state.lastClose = candles.length>1 ? candles[candles.length-2].close : null;
     }
 
-    const r = predict(candles,{hasVol,regime,higherTrend,htfLabel,symbol});
+    const r = predict(signalCandles,{hasVol,regime,higherTrend,htfLabel,symbol});
+    r.candles = candles;
     r.progress = Math.round(progress * 100);
     r.readyForSignal = readyForSignal;
 
