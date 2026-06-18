@@ -583,6 +583,7 @@ function calculateConfidenceBase({signal,trend,emaBull,emaBear,macdBull,macdBear
   const paMatch = pat.bias === (isBuy ? "bullish" : "bearish");
   const srMatch = isBuy ? (srEvents.breakout || srEvents.supportBounce) : (srEvents.breakdown || srEvents.resistanceRejection);
   const zoneMatch = isBuy ? nearSupport : nearResistance;
+  const flatTrend = trend === "neutral";
 
   let base = 16;
   base += directionMatch ? 14 : 0;
@@ -733,6 +734,9 @@ async function fetchCandles(symbol,interval,limit){
   return fetchBinance(symbol,interval,limit);
 }
 async function fetchCapital(symbol,interval,limit){
+  if(window.location.protocol==="file:"){
+    throw new Error("Capital.com mode cannot be used directly from file://. Run a local HTTP server and open the app from http://localhost.");
+  }
   const proxyValue = normalizeProxyInput(el.capUrl.value);
   const tok = normalizeProxyInput(el.capToken.value);
   if(!proxyValue || !tok){
@@ -750,10 +754,26 @@ async function fetchCapital(symbol,interval,limit){
   u.searchParams.set("token",tok);
   const url = u.toString();
   console.log("Capital proxy request:", url);
-  const r = await fetch(url,{mode:"cors",credentials:"omit"}).catch(e=>{throw new Error(`Fetch failed for ${url}: ${e.message}`);});
-  const j = await r.json().catch(()=>({error:`Proxy returned ${r.status} (not JSON).`}));
-  if(j.error)throw new Error(j.error);
-  if(!j.values||!j.values.length)throw new Error(`No candles for epic "${symbol}". Try the ?search= lookup for the exact epic.`);
+  let r;
+  try {
+    r = await fetch(url,{mode:"cors",credentials:"omit",cache:"no-store"});
+  } catch(e) {
+    const isFile = window.location.protocol === "file:";
+    const isMixed = window.location.protocol === "https:" && url.startsWith("http://");
+    const hints = [
+      isFile ? "This app is loaded from file://, which can cause cross-origin requests to fail. Run a local HTTP server instead." : "",
+      isMixed ? "Mixed content may be blocked because the page is HTTPS and the proxy URL is HTTP. Use HTTPS for the proxy." : ""
+    ].filter(Boolean).join(" ");
+    throw new Error(`Failed to fetch from proxy. Check the proxy URL, token, network and CORS settings.${hints?" "+hints:""} (${e.message})`);
+  }
+  if(!r.ok){
+    const body = await r.text().catch(()=>"");
+    const details = body ? ` Response body: ${body}` : "";
+    throw new Error(`Proxy returned HTTP ${r.status}.${details}`);
+  }
+  const j = await r.json().catch(()=>{throw new Error(`Proxy returned invalid JSON (HTTP ${r.status}).`);});
+  if(j.error) throw new Error(`Proxy error: ${j.error}`);
+  if(!j.values||!j.values.length) throw new Error(`No candles for epic "${symbol}". Try the ?search= lookup for the exact epic.`);
   return j.values.map(v=>({time:+v.time,open:+v.open,high:+v.high,low:+v.low,close:+v.close,volume:+v.volume||0}))
     .filter(c=>Number.isFinite(c.close)&&Number.isFinite(c.open));
 }
@@ -1145,7 +1165,6 @@ async function tick(force=false){
         try{const hc=await fetchCandles(symbol,htf,250);higherTrend=computeTrend(hc);htfLabel=htf;}catch(_){}
       }
     }
-    const now = Date.now();
     const duration=candleDurationMs(candles);
     const lastCandle=candles[candles.length-1];
     const isNewCandle = state.lastCandleTime === null || state.lastCandleTime !== lastCandle.time;
@@ -1360,7 +1379,12 @@ function initApp(){
   const storedCapToken = localStorage.getItem(CAP_TOKEN_KEY);
   const storedAutoBacktest = localStorage.getItem(AUTO_BACKTEST_KEY);
   const storedAutoAi = localStorage.getItem(AUTO_AI_KEY);
-  if(storedCapUrl) el.capUrl.value = normalizeProxyInput(storedCapUrl);
+  if(storedCapUrl){
+  el.capUrl.value = normalizeProxyInput(storedCapUrl);
+  }
+  else{
+  el.capUrl.value = "https://orange-b-api.toria9905.workers.dev";
+   }
   if(storedCapToken) el.capToken.value = normalizeProxyInput(storedCapToken);
   if(storedAutoBacktest !== null){ state.autoBacktest = storedAutoBacktest === "true"; el.autoBacktest.checked = state.autoBacktest; }
   if(storedAutoAi !== null){ state.autoAiLearning = storedAutoAi === "true"; el.autoAi.checked = state.autoAiLearning; }
