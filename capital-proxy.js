@@ -60,8 +60,19 @@ let session = { cst: null, sec: null, at: 0 };
 
 export default {
   async fetch(req, env) {
+    const requestOrigin = req.headers.get("Origin");
+    const allowOriginEnv = (env.ALLOW_ORIGIN || "*").trim();
+    const allowedOrigins = allowOriginEnv === "*"
+      ? ["*"]
+      : allowOriginEnv.split(",").map(v => v.trim()).filter(Boolean);
+    const allowOrigin = (allowedOrigins.includes("*") && requestOrigin)
+      ? requestOrigin
+      : (requestOrigin && allowedOrigins.includes(requestOrigin))
+        ? requestOrigin
+        : allowedOrigins[0] || "*";
+
     const cors = {
-      "Access-Control-Allow-Origin": env.ALLOW_ORIGIN || "*",
+      "Access-Control-Allow-Origin": allowOrigin,
       "Access-Control-Allow-Methods": "GET,OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
