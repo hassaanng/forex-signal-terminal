@@ -297,7 +297,7 @@
       <div class="emo">⚪</div>
       <div class="lbl">—</div>
       <div class="sub">Awaiting first reading</div>
-      <div class="sub countdown" id="next-candle-countdown">Next refresh in —:—</div>
+      <div class="sub countdown" id="next-candle-countdown">Live</div>
       <div class="sub meta" id="candle-progress">Progress: —</div>
       <div class="sub meta" id="time-remaining">Time remaining: —</div>
       <div class="sub meta" id="signal-generated-at">Signal generated at: —</div>
@@ -402,7 +402,7 @@ const state = {
   lastFetchAt:null, currentCandles:null, lastFetchSymbol:null, lastFetchInterval:null,
 };
 const TF_MS = {"1m":60000,"5m":300000,"15m":900000,"30m":1800000,"1h":3600000,"4h":14400000};
-const LIVE_SIGNAL_START_MS = 10000; // begin live prediction in final 10 seconds of each candle
+const LIVE_SIGNAL_START_MS = 0; // immediate live prediction using prior candle
 const SIGNAL_TICK_MS = 1000;
 const aiLearning = loadAiLearning();
 const $ = id => document.getElementById(id);
@@ -446,26 +446,14 @@ function updateRefreshCountdown(){
     el.next.textContent = "Paused";
     return;
   }
-  if(!state.nextAt){
-    el.next.textContent = "refreshing…";
-    return;
-  }
-  const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
-  const label = state.nextEventType === "candle" ? "next candle" : "next refresh";
-  el.next.textContent = `${label} in ${seconds}s`;
+  el.next.textContent = "Live";
 }
 function updateNextCandleCountdown(){
   if(!state.running || !state.nextCandleAt){
-    el.nextCandleCountdown.textContent = "Next candle in —:—";
+    el.nextCandleCountdown.textContent = "Live";
     return;
   }
-  const now = Date.now();
-  if(now < state.nextCandleAt){
-    el.nextCandleCountdown.textContent = `Next candle in ${formatCountdown(state.nextCandleAt - now)}`;
-    return;
-  }
-  const delayed = Math.max(0, Math.ceil((now - state.nextCandleAt) / 1000));
-  el.nextCandleCountdown.textContent = `Waiting for next candle… delayed ${delayed}s`;
+  el.nextCandleCountdown.textContent = "Live";
 }
 function formatAge(ms){
   if(ms==null||ms<0) return "—";
@@ -1219,9 +1207,6 @@ async function tick(force=false){
     if(!isNewCandle && state.nextCandleAt && now >= state.nextCandleAt && (!state.nextCandleRetryAt || retryReady)){
       state.nextCandleRetryCount = Math.min(10, state.nextCandleRetryCount + 1);
       state.nextCandleRetryAt = Date.now() + (state.nextCandleRetryCount < 10 ? 3000 : 10000);
-      if(state.nextCandleRetryCount <= 10){
-        setStatus(`Waiting for next candle… retry ${state.nextCandleRetryCount}/10`);
-      }
     }
 
     renderSession(r);
