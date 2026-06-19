@@ -479,12 +479,12 @@ function updateRefreshCountdown(){
   el.next.textContent = `Next refresh in ${seconds}s`;
 }
 function updateNextCandleCountdown(){
-  if(!state.running || !state.nextAt){
-    el.nextCandleCountdown.textContent = "Next refresh in —:—";
+  if(!state.running || !state.nextCandleAt){
+    el.nextCandleCountdown.textContent = "Next candle in —:—";
     return;
   }
-  const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
-  el.nextCandleCountdown.textContent = `Next refresh in ${formatCountdown(seconds * 1000)}`;
+  const seconds = Math.max(0, Math.ceil((state.nextCandleAt - Date.now()) / 1000));
+  el.nextCandleCountdown.textContent = `Next candle in ${formatCountdown(seconds * 1000)}`;
 }
 function formatAge(ms){
   if(ms==null||ms<0) return "—";
@@ -602,7 +602,7 @@ function loadAiLearning(){
 }
 function defaultAiLearning(){
   return {
-    symbols:{}, hours:{}, sessions:{}, rsiRanges:{}, volumeRegimes:{}, outcomes:{BUY:0,SELL:0},
+    symbols:{}, hours:{}, sessions:{}, rsiRanges:{}, volumeRegimes:{}, confidenceRanges:{}, outcomes:{BUY:0,SELL:0},
     trades:0, wins:0, lastUpdated:new Date().toISOString(),
   };
 }
@@ -618,8 +618,13 @@ function bucketRsi(value){
   const floor=Math.floor(value/10)*10;
   return `${floor}-${floor+9}`;
 }
+function bucketConfidence(value){
+  if(value==null||Number.isNaN(value)) return null;
+  const floor=Math.min(90,Math.floor(value/10)*10);
+  return floor===90 ? "90-100%" : `${floor}-${floor+9}%`;
+}
 function describeAiResult(win){return win?"win":"loss";}
-function recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, outcome, win){
+function recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, outcome, win, confidenceBucket){
   const delta = win?1:0;
   const recordKey = (key,obj)=>{obj[key] = obj[key]||{trades:0,wins:0};obj[key].trades++;obj[key].wins+=delta;};
   if(symbol) recordKey(symbol, aiLearning.symbols);
@@ -627,6 +632,10 @@ function recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime
   if(sessionName) recordKey(sessionName, aiLearning.sessions);
   if(rsiBucket) recordKey(rsiBucket, aiLearning.rsiRanges);
   if(regime) recordKey(regime, aiLearning.volumeRegimes);
+  if(confidenceBucket){
+    aiLearning.confidenceRanges = aiLearning.confidenceRanges || {};
+    recordKey(confidenceBucket, aiLearning.confidenceRanges);
+  }
   aiLearning.outcomes[outcome] = (aiLearning.outcomes[outcome]||0)+1;
   aiLearning.trades++;
   if(win) aiLearning.wins++;
@@ -677,7 +686,20 @@ function renderAiAssistant(){
   if(!bestSymbols.length && !bestHours.length && !bestSessions.length && !bestRsi.length && !bestVol.length){
     items.push(`<div style="grid-column:1/-1;color:var(--muted);font-size:12px;">Backtest more historical trades to bootstrap the AI learning assistant.</div>`);
   }
+  items.push(`<div class="k">Confidence calibration</div><div class="n">${renderConfidenceCalibration()}</div>`);
   el.aiAssistant.innerHTML = items.map(i=>`<div>${i}</div>`).join("");
+}
+function renderConfidenceCalibration(){
+  const ranges = aiLearning.confidenceRanges || {};
+  const rows = Object.keys(ranges).sort((a,b)=>parseInt(a,10)-parseInt(b,10)).map(bucket=>{
+    const entry = ranges[bucket];
+    const claimedMid = parseInt(bucket,10) + 5;
+    const actual = entry.trades >= AI_MIN_SAMPLE
+      ? `${Math.round(entry.wins / entry.trades * 100)}%`
+      : `not enough data yet (${entry.trades}/${AI_MIN_SAMPLE} trades)`;
+    return `<div>Confidence ${bucket} (claimed ~${claimedMid}%) -> actual win rate: ${actual}</div>`;
+  }).join("");
+  return rows || "<div>No confidence-bucketed history yet.</div>";
 }
 function prettyAiOutcome(name,stats){return `${name} ${(stats.wins/stats.trades*100).toFixed(0)}% (${stats.trades})`;}
 function updateAiAssistant(){renderAiAssistant();}
@@ -897,6 +919,10 @@ function predict(candles,opts={}){
   const macdSell = macdBear ? 20 : 0;
   const rsiBuy = r !== null && r > RSI_BUY_THRESHOLD ? 15 : 0;
   const rsiSell = r !== null && r < RSI_SELL_THRESHOLD ? 15 : 0;
+  const RSI_EXHAUSTION_HIGH = 75;
+  const RSI_EXHAUSTION_LOW = 25;
+  const exhaustionPenaltyBuy = r !== null && r > RSI_EXHAUSTION_HIGH ? 12 : 0;
+  const exhaustionPenaltySell = r !== null && r < RSI_EXHAUSTION_LOW ? 12 : 0;
   const volBuy = volBull ? 10 : 0;
   const volSell = volBear ? 10 : 0;
   const trendScore = trend === "bullish" ? 30 : trend === "bearish" ? -30 : 0;
@@ -907,16 +933,18 @@ function predict(candles,opts={}){
   const srBuy = (nearSupport ? 5 : 0) + (srEvents.supportBounce ? 5 : 0);
   const srSell = (nearResistance ? 5 : 0) + (srEvents.resistanceRejection ? 5 : 0);
 
-  const buyScore = macdBuy + rsiBuy + volBuy + trendBuy + priceBuy + srBuy;
-  const sellScore = macdSell + rsiSell + volSell + trendSell + priceSell + srSell;
+  const buyScore = macdBuy + rsiBuy + volBuy + trendBuy + priceBuy + srBuy - exhaustionPenaltyBuy;
+  const sellScore = macdSell + rsiSell + volSell + trendSell + priceSell + srSell - exhaustionPenaltySell;
 
   const tBuy = Math.max(0, Math.min(100, buyScore));
   const tSell = Math.max(0, Math.min(100, sellScore));
   const MIN_SCORE = 55;
+  const MIN_SCORE_FLAT = 65;
   const MIN_EDGE = 10;
+  const effectiveMinScore = trend === "neutral" ? MIN_SCORE_FLAT : MIN_SCORE;
   const edge = Math.abs(tBuy - tSell);
   let signal;
-  if (Math.max(tBuy, tSell) < MIN_SCORE || edge < MIN_EDGE) {
+  if (Math.max(tBuy, tSell) < effectiveMinScore || edge < MIN_EDGE) {
     signal = "NEUTRAL";
   } else {
     signal = tBuy > tSell ? "BUY" : "SELL";
@@ -932,6 +960,8 @@ function predict(candles,opts={}){
   if(emaBear)reasons.push("EMA bearish confirmation: price below EMA 200");
   reasons.push(macdBull?"MACD is bullish":macdBear?"MACD is bearish":"MACD is neutral");
   if(r!==null)reasons.push(`RSI 14 at ${r.toFixed(1)} (${r>55?"bullish":r<45?"bearish":"neutral"})`);
+  if(exhaustionPenaltyBuy > 0) reasons.push(`RSI ${r.toFixed(0)} is deep overbought - buy confidence reduced (exhaustion risk)`);
+  if(exhaustionPenaltySell > 0) reasons.push(`RSI ${r.toFixed(0)} is deep oversold - sell confidence reduced (exhaustion risk)`);
   if(hasVol&&volRatio!==null)reasons.push(`Volume ${volRatio.toFixed(2)}× the 20-bar average`);
   if(!hasVol)reasons.push("Volume not available for this data source");
   if(sr.support!==null)reasons.push(`Nearest support ≈ ${fmt(sr.support)}`);
@@ -945,7 +975,7 @@ function predict(candles,opts={}){
   if(pat.bias!=="neutral")reasons.push(`Price action pattern: ${pat.name}`);
 
   if(trend==="neutral"){
-    reasons.push("Market is range-bound; trend confirmation is weak");
+    reasons.push(`Market is range-bound; minimum score raised to ${MIN_SCORE_FLAT}`);
   }
   if(hasVol&&volRatio!==null&&volRatio<0.8)reasons.push("Volume is below average; momentum may be weak");
 
@@ -1159,6 +1189,17 @@ function render(r){
   el.signal.querySelector(".lbl").textContent=r.signal;
   const statusText = `${r.strength} · ${r.confidenceBucket} confidence · ${r.confidence}%`;
   el.signal.querySelector(".sub").textContent=statusText;
+  const liveCandle = r.candles && r.candles[r.candles.length - 1];
+  const driftNode = document.getElementById("price-drift");
+  if(liveCandle && r.price){
+    const drift = liveCandle.close - r.price;
+    const driftPct = (drift / r.price) * 100;
+    const driftText = `Live price: ${fmt(liveCandle.close)} (reference: ${fmt(r.price)}, drift: ${driftPct.toFixed(3)}%)`;
+    if(driftNode) driftNode.textContent = driftText;
+    else el.signalAge.insertAdjacentHTML("afterend", `<div class="sub meta" id="price-drift">${driftText}</div>`);
+  } else if(driftNode){
+    driftNode.remove();
+  }
 
   setMetric(el.m.price,fmt(r.price));
   setMetric(el.m.trend,trendArrow(r.trend),r.trend==="bullish"?"bull":r.trend==="bearish"?"bear":"");
@@ -1330,6 +1371,7 @@ async function tick(force=false){
           sessionName: session(timeInPkt(lastCandle.time)).name,
           hour: timeInPkt(lastCandle.time).getHours(),
           rsiBucket: bucketRsi(r.rsi),
+          confidenceBucket: bucketConfidence(r.confidence),
           regime,
           sl: r.sl,
           tp: r.tp,
@@ -1402,6 +1444,7 @@ async function runBacktest(opts={mode:"both"}){
         sessionName:session(pkt).name,
         hour:pkt.getHours(),
         rsiBucket:bucketRsi(r.rsi),
+        confidenceBucket:bucketConfidence(r.confidence),
         regime:regime,
         signal:r.signal,
         win:winFlag,
@@ -1416,7 +1459,7 @@ async function runBacktest(opts={mode:"both"}){
     const pf=gl>0?gp/gl:(gp>0?Infinity:0);
     const avg=trades?eq/trades*100:0;
     if(opts.mode==="train" || opts.mode=== "both"){
-      trainRecords.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win));
+      trainRecords.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win, rec.confidenceBucket));
       saveAiLearning();
       updateAiAssistant();
     }
@@ -1441,7 +1484,7 @@ async function runBacktest(opts={mode:"both"}){
 function evaluatePendingSignal(closePrice){
   const pending = state.pendingSignal;
   if(!pending||pending.entryPrice==null) return;
-  const {entryPrice, signal, symbol, entryTime, sessionName, hour, rsiBucket, regime, sl, tp} = pending;
+  const {entryPrice, signal, symbol, entryTime, sessionName, hour, rsiBucket, regime, sl, tp, confidenceBucket} = pending;
   if(signal === "NEUTRAL"){
     state.pendingSignal = null;
     return;
@@ -1449,7 +1492,7 @@ function evaluatePendingSignal(closePrice){
   const win = signal === "BUY" ? closePrice >= tp : closePrice <= tp;
   const loss = signal === "BUY" ? closePrice <= sl : closePrice >= sl;
   const outcome = win ? true : loss ? false : (signal === "BUY" ? closePrice > entryPrice : closePrice < entryPrice);
-  recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome);
+  recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome, confidenceBucket);
   saveAiLearning();
   state.pendingSignal = null;
   const exitPrice = win ? tp : (loss ? sl : closePrice);
