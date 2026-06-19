@@ -1195,6 +1195,7 @@ async function tick(force=false){
         updateAiAssistant();
       }
       state.lastClose = candles.length>1 ? candles[candles.length-2].close : null;
+      state.renderedSignalResult = null;
     }
 
     const r = predict(signalCandles,{hasVol,regime,higherTrend,htfLabel,symbol});
@@ -1202,28 +1203,24 @@ async function tick(force=false){
     r.progress = Math.round(progress * 100);
     r.readyForSignal = readyForSignal;
 
-    if(isNewCandle){
+    const shouldRenderSignal = readyForSignal && (!state.renderedSignalResult || state.renderedSignalResult.lastSignalCandle !== lastCandle.time);
+    if(shouldRenderSignal){
       state.lastSignal = r.signal;
       state.lastSignalCandle = lastCandle.time;
       state.signalGeneratedAt = Date.now();
       state.renderedSignalResult = r;
-      state.markers.push({index:candles.length-1,type:r.signal});
-      if(state.markers.length>40)state.markers.shift();
-      render(r);
-    } else {
-      if(!state.renderedSignalResult){
-        state.renderedSignalResult = r;
-        state.lastSignal = r.signal;
-        state.lastSignalCandle = lastCandle.time;
-        state.signalGeneratedAt = Date.now();
-        render(r);
+      if(isNewCandle){
+        state.markers.push({index:candles.length-1,type:r.signal});
+        if(state.markers.length>40)state.markers.shift();
       }
-      if(state.nextCandleAt && now >= state.nextCandleAt && (!state.nextCandleRetryAt || retryReady)){
-        state.nextCandleRetryCount = Math.min(10, state.nextCandleRetryCount + 1);
-        state.nextCandleRetryAt = Date.now() + (state.nextCandleRetryCount < 10 ? 3000 : 10000);
-        if(state.nextCandleRetryCount <= 10){
-          setStatus(`Waiting for next candle… retry ${state.nextCandleRetryCount}/10`);
-        }
+      render(r);
+    }
+
+    if(!isNewCandle && state.nextCandleAt && now >= state.nextCandleAt && (!state.nextCandleRetryAt || retryReady)){
+      state.nextCandleRetryCount = Math.min(10, state.nextCandleRetryCount + 1);
+      state.nextCandleRetryAt = Date.now() + (state.nextCandleRetryCount < 10 ? 3000 : 10000);
+      if(state.nextCandleRetryCount <= 10){
+        setStatus(`Waiting for next candle… retry ${state.nextCandleRetryCount}/10`);
       }
     }
 
