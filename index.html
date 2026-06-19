@@ -1218,7 +1218,7 @@ async function tick(force=false){
     renderSession(r);
     renderChart(symbol,r);
     updateLiveCandleInfo();
-    setStatus(`Live · ${prettySymbol(symbol)} · ${state.interval} · ${state.mode} · ${new Date().toLocaleTimeString()}`,true);
+    setStatus(`Running · ${prettySymbol(symbol)} · ${state.interval} · ${state.mode} · ${new Date().toLocaleTimeString()}`,true);
   }catch(err){
     setStatus(`Error: ${err.message}`);
     el.reasonsBox.open=true;
