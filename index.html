@@ -121,6 +121,7 @@
   .signal .sub.meta{margin-top:8px;font-size:12px;color:var(--muted);letter-spacing:.8px;}
   .signal.buy{background:var(--bull-soft);border-color:var(--bull);} .signal.buy .lbl{color:var(--bull);}
   .signal.sell{background:var(--bear-soft);border-color:var(--bear);} .signal.sell .lbl{color:var(--bear);}
+  .signal.neutral{background:rgba(138,151,168,.12);border-color:#8a97a8;} .signal.neutral .lbl{color:#8a97a8;}
 
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
   .metric{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px;}
@@ -252,12 +253,23 @@
         <label><input type="checkbox" id="auto-ai"> Auto AI learning</label>
       </div>
     </div>
+
+    <div class="field">
+      <label for="account-equity">Account equity</label>
+      <input type="text" id="account-equity" placeholder="10000" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="risk-pct">Risk per trade (%)</label>
+      <input type="text" id="risk-pct" placeholder="1" autocomplete="off" spellcheck="false">
+      <div class="hint">Use a small fixed percentage of equity for position sizing.</div>
+    </div>
   </div>
 
   <!-- Actions -->
   <div class="actions">
     <button class="btn btn-primary" id="btn-start">▶ Start</button>
     <button class="btn btn-ghost" id="btn-stop" disabled>⏸ Stop</button>
+    <button class="btn btn-ghost" id="btn-resume" disabled>▶ Resume</button>
     <button class="btn btn-ghost" id="btn-refresh">↻ Refresh</button>
     <button class="btn btn-ghost" id="btn-backtest">⚙ Backtest</button>
   </div>
@@ -302,6 +314,7 @@
       <div class="sub meta" id="time-remaining">Time remaining: —</div>
       <div class="sub meta" id="signal-generated-at">Signal generated at: —</div>
       <div class="sub meta" id="signal-age">Signal age: —</div>
+      <div class="sub meta" id="position-sizing">Position sizing: —</div>
     </div>
     <div class="grid" id="metrics">
       <div class="metric"><div class="k">Price</div><div class="v" id="m-price">—</div></div>
@@ -312,6 +325,9 @@
       <div class="metric"><div class="k">Buy score</div><div class="v" id="m-buy">—</div></div>
       <div class="metric"><div class="k">Sell score</div><div class="v" id="m-sell">—</div></div>
       <div class="metric"><div class="k">Risk</div><div class="v" id="m-risk">—</div></div>
+      <div class="metric"><div class="k">SL</div><div class="v" id="m-sl">—</div></div>
+      <div class="metric"><div class="k">TP</div><div class="v" id="m-tp">—</div></div>
+      <div class="metric"><div class="k">Position size</div><div class="v" id="m-size">—</div></div>
       <div class="metric"><div class="k">Nearest Support</div><div class="v" id="m-support">—</div></div>
       <div class="metric"><div class="k">Nearest Resistance</div><div class="v" id="m-resistance">—</div></div>
       <div class="metric"><div class="k">Distance to Support</div><div class="v" id="m-supdist">—</div></div>
@@ -392,6 +408,14 @@ const AI_MIN_SAMPLE = 25; // minimum trades before a bucket's win rate is truste
 const RSI_BUY_THRESHOLD = 60;
 const AUTO_BACKTEST_INTERVAL = 30 * 60000;
 const RSI_SELL_THRESHOLD = 40;
+const SPREAD_PCT = { default: 0.0005, EURUSD: 0.0001, GBPJPY: 0.0003 };
+const TRAIN_SPLIT = 350;
+const SL_ATR_MULT = 1.5;
+const TP_ATR_MULT = 3.0;
+const MAX_CONSEC_LOSSES = 4;
+const MAX_DAILY_LOSS_PCT = 3; // percent of account equity
+const ACCOUNT_EQUITY_KEY = "confluence-account-equity";
+const RISK_PCT_KEY = "confluence-risk-pct";
 const state = {
   running:false, source:"demo", interval:"15m", mode:"balanced",
   refresh:60, pollTimer:null, countTimer:null, clockTimer:null, nextAt:null, nextEventType:"refresh",
@@ -400,6 +424,7 @@ const state = {
   nextCandleRetryAt:null, nextCandleRetryCount:0, renderedSignalResult:null,
   signalGeneratedAt:null, lastSignal:null, lastSignalCandle:null, pendingSignal:null,
   lastFetchAt:null, currentCandles:null, lastFetchSymbol:null, lastFetchInterval:null,
+  equityCurve:[], consecLosses:0, paused:false, pauseReason:null, resumeAcknowledged:false,
 };
 const TF_MS = {"1m":60000,"5m":300000,"15m":900000,"30m":1800000,"1h":3600000,"4h":14400000};
 const LIVE_SIGNAL_START_MS = 0; // immediate live prediction using prior candle
@@ -537,14 +562,16 @@ function bindElements(){
     pair:$("pair"), pairBadge:$("pair-badge"), customField:$("custom-field"), customPair:$("custom-pair"),
     tf:$("tf"), mode:$("mode"), refresh:$("refresh"),
     autoBacktest:$("auto-backtest"), autoAi:$("auto-ai"),
-    start:$("btn-start"), stop:$("btn-stop"), refreshBtn:$("btn-refresh"), backtestBtn:$("btn-backtest"),
+    accountEquity:$("account-equity"), riskPct:$("risk-pct"),
+    start:$("btn-start"), stop:$("btn-stop"), resume:$("btn-resume"), refreshBtn:$("btn-refresh"), backtestBtn:$("btn-backtest"),
     dot:$("dot"), statusText:$("status-text"), next:$("next"), nextCandleCountdown:$("next-candle-countdown"),
     candleProgress:$("candle-progress"), timeRemaining:$("time-remaining"), signalGeneratedAt:$("signal-generated-at"), signalAge:$("signal-age"),
+    positionSizing:$("position-sizing"),
     chPair:$("ch-pair"), chTf:$("ch-tf"), chLast:$("ch-last"), chChg:$("ch-chg"),
     chartEmpty:$("chart-empty"),
     signal:$("signal"), reasons:$("reasons"), reasonsBox:$("reasons-box"), backtest:$("backtest"), aiAssistant:$("ai-assistant"),
     clockTime:$("clock-time"),
-    m:{price:$("m-price"),trend:$("m-trend"),conf:$("m-conf"),rsi:$("m-rsi"),macd:$("m-macd"),buy:$("m-buy"),sell:$("m-sell"),risk:$("m-risk"),support:$("m-support"),resistance:$("m-resistance"),supdist:$("m-supdist"),resdist:$("m-resdist")},
+    m:{price:$("m-price"),trend:$("m-trend"),conf:$("m-conf"),rsi:$("m-rsi"),macd:$("m-macd"),buy:$("m-buy"),sell:$("m-sell"),risk:$("m-risk"),sl:$("m-sl"),tp:$("m-tp"),size:$("m-size"),support:$("m-support"),resistance:$("m-resistance"),supdist:$("m-supdist"),resdist:$("m-resdist")},
     s:{session:$("s-session"),liq:$("s-liq"),vol:$("s-vol"),volu:$("s-volu")},
   });
 }
@@ -724,6 +751,47 @@ function detectSrEvents(c,sr){const last=c[c.length-1],prev=c[c.length-2];
   const breakdown=sr.support && last.close<sr.support && last.close<prev.close;
   return{supportBounce,resistanceRejection,breakout,breakdown,supDist,resDist};}
 
+function computeExits(entry, signal, atrVal){
+  const slDist = atrVal * SL_ATR_MULT;
+  const tpDist = atrVal * TP_ATR_MULT;
+  return signal === "BUY"
+    ? { sl: entry - slDist, tp: entry + tpDist }
+    : { sl: entry + slDist, tp: entry - tpDist };
+}
+function positionSize(accountEquity, riskPct, entry, sl){
+  const equity = Number(accountEquity) || 0;
+  const risk = Number(riskPct) || 0;
+  const riskAmount = equity * (risk / 100);
+  const slDistance = Math.abs(entry - sl);
+  const slDistancePct = slDistance / entry;
+  const units = slDistance > 0 ? riskAmount / slDistance : null;
+  return {riskAmount, slDistancePct, units};
+}
+function sumTodaysPnl(curve){
+  const today = new Date();
+  const tz = "Asia/Karachi";
+  const todayStr = new Date(today.toLocaleString("en-US",{timeZone:tz})).toDateString();
+  return curve.reduce((sum,entry)=>{
+    const d = new Date(new Date(entry.time).toLocaleString("en-US",{timeZone:tz}));
+    return d.toDateString()===todayStr ? sum + (entry.pnl||0) : sum;
+  },0);
+}
+function checkCircuitBreaker(state){
+  if(state.consecLosses >= MAX_CONSEC_LOSSES) return "Paused: too many consecutive losses. Review before resuming.";
+  const todayPnl = sumTodaysPnl(state.equityCurve);
+  if(todayPnl <= -MAX_DAILY_LOSS_PCT/100 * (Number(el.accountEquity?.value) || 0)) return "Paused: daily loss limit reached.";
+  return null;
+}
+function renderPausedState(message){
+  el.chartEmpty.style.display="none";
+  el.signal.className="signal neutral";
+  el.signal.querySelector(".emo").textContent="⚪";
+  el.signal.querySelector(".lbl").textContent="PAUSED";
+  el.signal.querySelector(".sub").textContent=message;
+  el.positionSizing.textContent = "Position sizing paused";
+  el.reasons.innerHTML = `<li class="veto">${message}</li>`;
+}
+
 // ---------- Volatility regime (honest replacement for "news") ----------
 function volatilityRegime(c,hasVol){
   if(!hasVol) return "Calm";
@@ -821,28 +889,41 @@ function predict(candles,opts={}){
   const nearSupport=sr.support&&supDist<=0.003;
   const nearResistance=sr.resistance&&resDist<=0.003;
 
+  const atrArr = atr(candles,14);
+  const atrVal = atrArr[i];
+  const atrPct = atrVal != null ? atrVal / last.close : null;
   const pat=candlestick(candles,i);
-  const emaBuy = emaBull ? 25 : 0;
-  const emaSell = emaBear ? 25 : 0;
   const macdBuy = macdBull ? 20 : 0;
   const macdSell = macdBear ? 20 : 0;
   const rsiBuy = r !== null && r > RSI_BUY_THRESHOLD ? 15 : 0;
   const rsiSell = r !== null && r < RSI_SELL_THRESHOLD ? 15 : 0;
   const volBuy = volBull ? 10 : 0;
   const volSell = volBear ? 10 : 0;
-  const trendBuy = trend === "bullish" ? 12 : trend === "bearish" ? -8 : 0;
-  const trendSell = trend === "bearish" ? 12 : trend === "bullish" ? -8 : 0;
-  const priceBuy = (pat.bias === "bullish" ? 12 : 0) + (srEvents.breakout ? 8 : 0);
-  const priceSell = (pat.bias === "bearish" ? 12 : 0) + (srEvents.breakdown ? 8 : 0);
+  const trendScore = trend === "bullish" ? 30 : trend === "bearish" ? -30 : 0;
+  const trendBuy = Math.max(0, trendScore);
+  const trendSell = Math.max(0, -trendScore);
+  const priceBuy = (pat.bias === "bullish" ? 10 : 0) + (srEvents.breakout ? 5 : 0);
+  const priceSell = (pat.bias === "bearish" ? 10 : 0) + (srEvents.breakdown ? 5 : 0);
   const srBuy = (nearSupport ? 5 : 0) + (srEvents.supportBounce ? 5 : 0);
   const srSell = (nearResistance ? 5 : 0) + (srEvents.resistanceRejection ? 5 : 0);
 
-  const buyScore = emaBuy + macdBuy + rsiBuy + priceBuy + volBuy + srBuy + trendBuy;
-  const sellScore = emaSell + macdSell + rsiSell + priceSell + volSell + srSell + trendSell;
+  const buyScore = macdBuy + rsiBuy + volBuy + trendBuy + priceBuy + srBuy;
+  const sellScore = macdSell + rsiSell + volSell + trendSell + priceSell + srSell;
 
   const tBuy = Math.max(0, Math.min(100, buyScore));
   const tSell = Math.max(0, Math.min(100, sellScore));
-  const signal = tBuy > tSell ? "BUY" : tSell > tBuy ? "SELL" : (last.close >= e200[i] ? "BUY" : "SELL");
+  const MIN_SCORE = 55;
+  const MIN_EDGE = 10;
+  const edge = Math.abs(tBuy - tSell);
+  let signal;
+  if (Math.max(tBuy, tSell) < MIN_SCORE || edge < MIN_EDGE) {
+    signal = "NEUTRAL";
+  } else {
+    signal = tBuy > tSell ? "BUY" : "SELL";
+  }
+  const exits = signal === "NEUTRAL" || atrVal == null ? {sl:null,tp:null} : computeExits(last.close, signal, atrVal);
+  const slPct = exits.sl != null ? Math.abs(exits.sl - last.close) / last.close * 100 : null;
+  const tpPct = exits.tp != null ? Math.abs(exits.tp - last.close) / last.close * 100 : null;
 
   const reasons=[];
   const vetoes=[];
@@ -874,6 +955,8 @@ function predict(candles,opts={}){
   } else if(signal==="SELL"){
     if(trend==="bearish") reasons.push("Trend priority favors SELL signals");
     else if(trend==="bullish") reasons.push("Trend priority favors BUY over SELL");
+  } else {
+    reasons.push("Signal does not meet minimum confidence or edge requirements.");
   }
   if(macdBull&&signal==="BUY") reasons.push("MACD confirms the BUY signal");
   if(macdBear&&signal==="SELL") reasons.push("MACD confirms the SELL signal");
@@ -895,19 +978,21 @@ function predict(candles,opts={}){
   const scoreBoost = higherAgree ? 5 : 0;
   const score = Math.max(0, Math.min(100, Math.round(baseScore + scoreBoost)));
 
-  const confidence = signal === "BUY" ? tBuy : tSell;
-  const confidenceBucket = confidence >= 80 ? "High" : confidence >= 60 ? "Medium" : "Low";
+  const confidence = signal === "BUY" ? tBuy : signal === "SELL" ? tSell : 0;
+  const confidenceBucket = signal === "NEUTRAL" ? "None" : confidence >= 80 ? "High" : confidence >= 60 ? "Medium" : "Low";
 
   const adjusted = confidence;
-  let strength="Low confidence signal";
-  if(adjusted>=91) strength = "Very high confidence signal";
-  else if(adjusted>=81) strength = "High confidence signal";
-  else if(adjusted>=71) strength = "Strong signal";
-  else if(adjusted>=61) strength = "Moderate signal";
-  else if(adjusted>=50) strength = "Weak signal";
-  else strength = "Very weak signal";
+  let strength = signal === "NEUTRAL" ? "No trade signal" : "Low confidence signal";
+  if(signal !== "NEUTRAL"){
+    if(adjusted>=91) strength = "Very high confidence signal";
+    else if(adjusted>=81) strength = "High confidence signal";
+    else if(adjusted>=71) strength = "Strong signal";
+    else if(adjusted>=61) strength = "Moderate signal";
+    else if(adjusted>=50) strength = "Weak signal";
+    else strength = "Very weak signal";
+  }
 
-  const risk="N/A";
+  const risk = exits.sl != null ? `${slPct.toFixed(2)}%` : "N/A";
 
   return {signal,strength,confidence:confidence,confidenceBucket,score:score,buyScore:tBuy,sellScore:tSell,aiBoost:aiBoost,
     price:last.close,trend,rsi:r,
@@ -915,7 +1000,7 @@ function predict(candles,opts={}){
     volRatio:volRatio,hasVol,risk,regime:opts.regime||"Calm",
     support:sr.support,resistance:sr.resistance,supDist:supDist===Infinity?null:supDist*100,
     resDist:resDist===Infinity?null:resDist*100,sr:sr,reasons,vetoes,
-    candles};
+    candles,atrVal,atrPct,sl:exits.sl,tp:exits.tp,slPct,tpPct};
 }
 
 // ---------- Formatting ----------
@@ -1067,8 +1152,8 @@ const ChartEngine = (() => {
 function setMetric(node,val,cls){node.textContent=val;node.className="v"+(cls?" "+cls:"");}
 function render(r){
   el.chartEmpty.style.display="none";
-  const cls=r.signal==="BUY"?"buy":"sell";
-  const emo=r.signal==="BUY"?"🟢":"🔴";
+  const cls = r.signal==="BUY" ? "buy" : r.signal==="SELL" ? "sell" : "neutral";
+  const emo = r.signal==="BUY" ? "🟢" : r.signal==="SELL" ? "🔴" : "⚪";
   el.signal.className="signal "+cls;
   el.signal.querySelector(".emo").textContent=emo;
   el.signal.querySelector(".lbl").textContent=r.signal;
@@ -1083,10 +1168,14 @@ function render(r){
   setMetric(el.m.buy,r.buyScore+"/100",r.buyScore>=70?"bull":"");
   setMetric(el.m.sell,r.sellScore+"/100",r.sellScore>=70?"bear":"");
   setMetric(el.m.risk,r.risk,r.risk==="High"?"bear":r.risk==="Low"?"bull":"");
+  setMetric(el.m.sl,r.sl!=null?fmt(r.sl):"—");
+  setMetric(el.m.tp,r.tp!=null?fmt(r.tp):"—");
+  setMetric(el.m.size,r.positionSize?r.positionSize:"—");
   setMetric(el.m.support,fmt(r.support));
   setMetric(el.m.resistance,fmt(r.resistance));
   setMetric(el.m.supdist,r.supDist!=null?`${r.supDist.toFixed(2)}%`:"—");
   setMetric(el.m.resdist,r.resDist!=null?`${r.resDist.toFixed(2)}%`:"—");
+  el.positionSizing.textContent = r.positionSize ? r.positionSize : "Risk sizing not available";
 
   const items=[];
   r.vetoes.forEach(v=>items.push(`<li class="veto">⚠ ${v}</li>`));
@@ -1192,10 +1281,35 @@ async function tick(force=false){
       state.renderedSignalResult = null;
     }
 
-    const r = predict(signalCandles,{hasVol,regime,higherTrend,htfLabel,symbol});
+    const circuit = checkCircuitBreaker(state);
+    if(circuit){
+      state.paused = true;
+      state.pauseReason = circuit;
+      renderPausedState(circuit);
+      el.resume.disabled = false;
+      setStatus(circuit);
+      if(state.running){
+        if(state.pollTimer) clearTimeout(state.pollTimer);
+        return;
+      }
+    }
+
+    const r = predict(signalCandles,{hasVol,regime,higherTrend,htfLabel,symbol,
+      accountEquity:el.accountEquity.value, riskPct:el.riskPct.value});
     r.candles = candles;
     r.progress = Math.round(progress * 100);
     r.readyForSignal = readyForSignal;
+    if(r.sl != null && r.tp != null){
+      const sizing = positionSize(el.accountEquity.value, el.riskPct.value, r.price, r.sl);
+      if(sizing.units!=null){
+        r.positionSize = `Risking ${sizing.riskAmount.toFixed(2)} (${(Number(el.riskPct.value)||0).toFixed(2)}% of ${Number(el.accountEquity.value||0).toFixed(2)}) → SL ${fmt(r.sl)}, TP ${fmt(r.tp)}, size ${Math.round(sizing.units)} units`;
+        r.risk = `${(sizing.slDistancePct*100).toFixed(2)}%`;
+      } else {
+        r.positionSize = "Sizing unavailable";
+      }
+    } else {
+      r.positionSize = "N/A";
+    }
 
     const shouldRenderSignal = !state.renderedSignalResult || state.renderedSignalResult.lastSignalCandle !== lastCandle.time;
     if(shouldRenderSignal){
@@ -1203,9 +1317,25 @@ async function tick(force=false){
       state.lastSignalCandle = lastCandle.time;
       state.signalGeneratedAt = Date.now();
       state.renderedSignalResult = r;
-      if(isNewCandle){
+      if(isNewCandle && r.signal !== "NEUTRAL"){
         state.markers.push({index:candles.length-1,type:r.signal});
         if(state.markers.length>40)state.markers.shift();
+      }
+      if(r.signal !== "NEUTRAL"){
+        state.pendingSignal = {
+          entryPrice: r.price,
+          signal: r.signal,
+          symbol,
+          entryTime: lastCandle.time,
+          sessionName: session(timeInPkt(lastCandle.time)).name,
+          hour: timeInPkt(lastCandle.time).getHours(),
+          rsiBucket: bucketRsi(r.rsi),
+          regime,
+          sl: r.sl,
+          tp: r.tp,
+        };
+      } else {
+        state.pendingSignal = null;
       }
       render(r);
     }
@@ -1238,7 +1368,7 @@ async function tick(force=false){
 }
 function setStatus(t,live){el.statusText.textContent=t;el.dot.classList.toggle("live",!!live);}
 // ---------- Backtest ----------
-async function runBacktest(){
+async function runBacktest(opts={mode:"test"}){
   const symbol=activeSymbol();
   el.backtest.innerHTML=`<div style="grid-column:1/-1;color:var(--muted);">Running backtest on ${prettySymbol(symbol)}…</div>`;
   try{
@@ -1246,23 +1376,28 @@ async function runBacktest(){
     const hasVol=sourceHasVolume(candles);
     if(candles.length<240)throw new Error("Not enough history for a backtest.");
     let eq=0,maxEq=0,dd=0,wins=0,trades=0,gp=0,gl=0;
-    const records=[];
+    const trainRecords=[];
+    const testRecords=[];
+    const splitIndex = Math.min(TRAIN_SPLIT, candles.length - 100);
     for(let i=210;i<candles.length-1;i++){
-      const win=candles.slice(0,i+1);
-      const regime=volatilityRegime(win,hasVol);
-      const r=predict(win,{hasVol,regime,symbol:symbol});
-      const entry=candles[i].close;
-      const tp=r.signal==="BUY"?entry*1.01:entry*0.99;
-      const sl=r.signal==="BUY"?entry*0.995:entry*1.005;
+      const window=candles.slice(0,i+1);
+      const regime=volatilityRegime(window,hasVol);
+      const r=predict(window,{hasVol,regime,symbol:symbol});
+      if(r.signal==="NEUTRAL") continue;
+      const entry=candles[i+1].open;
+      const exits = computeExits(entry, r.signal, r.atrVal);
+      const tp = exits.tp; const sl = exits.sl;
       let exit=null;
-      for(let j=i+1;j<candles.length;j++){const c=candles[j];
+      for(let j=i+2;j<candles.length;j++){const c=candles[j];
         if(r.signal==="BUY"){if(c.low<=sl){exit=sl;break;}if(c.high>=tp){exit=tp;break;}}
         else{if(c.high>=sl){exit=sl;break;}if(c.low<=tp){exit=tp;break;}}}
       if(exit==null)exit=candles[candles.length-1].close;
-      const pnl=r.signal==="BUY"?(exit-entry)/entry:(entry-exit)/entry;
+      const rawPnl = r.signal==="BUY"?(exit-entry)/entry:(entry-exit)/entry;
+      const cost = SPREAD_PCT[symbol] || SPREAD_PCT.default;
+      const pnl = rawPnl - cost;
       const winFlag = pnl>0;
       const pkt = timeInPkt(candles[i].time);
-      records.push({
+      const record = {
         entryTime:candles[i].time,
         sessionName:session(pkt).name,
         hour:pkt.getHours(),
@@ -1270,28 +1405,34 @@ async function runBacktest(){
         regime:regime,
         signal:r.signal,
         win:winFlag,
-      });
+        pnl:pnl,
+      };
+      if(i < splitIndex) trainRecords.push(record);
+      else testRecords.push(record);
       eq+=pnl;maxEq=Math.max(maxEq,eq);dd=Math.max(dd,maxEq-eq);
       if(pnl>0){wins++;gp+=pnl;}else gl+=Math.abs(pnl);trades++;
     }
     const wr=trades?wins/trades*100:0;
     const pf=gl>0?gp/gl:(gp>0?Infinity:0);
     const avg=trades?eq/trades*100:0;
-    if(records.length){
-      const pkt = timeInPkt(candles[0].time);
-      records.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win));
+    if(opts.mode==="train"){
+      trainRecords.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win));
       saveAiLearning();
       updateAiAssistant();
     }
+    const trainStats = trainRecords.length ? `${(trainRecords.filter(r=>r.win).length/trainRecords.length*100).toFixed(1)}%` : "N/A";
+    const testStats = testRecords.length ? `${(testRecords.filter(r=>r.win).length/testRecords.length*100).toFixed(1)}%` : "N/A";
     el.backtest.innerHTML=`
       <div><div class="k">Trades</div><div class="n">${trades}</div></div>
       <div><div class="k">Win rate</div><div class="n">${wr.toFixed(1)}%</div></div>
+      <div><div class="k">Train win rate</div><div class="n">${trainStats}</div></div>
+      <div><div class="k">Out-of-sample win rate</div><div class="n">${testStats}</div></div>
       <div><div class="k">Profit factor</div><div class="n">${Number.isFinite(pf)?pf.toFixed(2):"∞"}</div></div>
       <div><div class="k">Max drawdown</div><div class="n">${(dd*100).toFixed(2)}%</div></div>
       <div><div class="k">Avg / trade</div><div class="n">${avg.toFixed(2)}%</div></div>
-      <div><div class="k">Net (1% TP / 0.5% SL)</div><div class="n">${(eq*100).toFixed(2)}%</div></div>
+      <div><div class="k">Cost model</div><div class="n">Spread ${((SPREAD_PCT[symbol]||SPREAD_PCT.default)*100).toFixed(2)}%</div></div>
       <div style="grid-column:1/-1;color:var(--faint);font-size:11px;line-height:1.6;">
-        Walk-forward on the last ~500 candles. Frictionless (no spread/slippage), so live results will be worse. A sanity check, not a track record.</div>`;
+        Backtest uses next-bar entries, ATR-based exits, and a small spread/slippage cost model. Train/test results are separated to avoid leakage.</div>`;
   }catch(err){
     el.backtest.innerHTML=`<div style="grid-column:1/-1;color:#ffb3bd;">${err.message}</div>`;
   }
@@ -1300,15 +1441,20 @@ async function runBacktest(){
 function evaluatePendingSignal(closePrice){
   const pending = state.pendingSignal;
   if(!pending||pending.entryPrice==null) return;
-  const {entryPrice, signal, symbol, entryTime, sessionName, hour, rsiBucket, regime} = pending;
-  const tp = signal === "BUY" ? entryPrice * 1.01 : entryPrice * 0.99;
-  const sl = signal === "BUY" ? entryPrice * 0.995 : entryPrice * 1.005;
+  const {entryPrice, signal, symbol, entryTime, sessionName, hour, rsiBucket, regime, sl, tp} = pending;
+  if(signal === "NEUTRAL"){
+    state.pendingSignal = null;
+    return;
+  }
   const win = signal === "BUY" ? closePrice >= tp : closePrice <= tp;
   const loss = signal === "BUY" ? closePrice <= sl : closePrice >= sl;
   const outcome = win ? true : loss ? false : (signal === "BUY" ? closePrice > entryPrice : closePrice < entryPrice);
   recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome);
   saveAiLearning();
   state.pendingSignal = null;
+  state.equityCurve.push({time:entryTime,pnl: outcome? tp-entryPrice : loss? sl-entryPrice : closePrice-entryPrice});
+  if(outcome===false) state.consecLosses++;
+  else if(outcome===true) state.consecLosses=0;
 }
 
 function scheduleAutoBacktest(delay){
@@ -1363,6 +1509,9 @@ function bindUiEvents(){
   el.autoAi.addEventListener("change",()=>{state.autoAiLearning=el.autoAi.checked;
     localStorage.setItem(AUTO_AI_KEY, state.autoAiLearning);
   });
+  el.accountEquity.addEventListener("change",()=>{localStorage.setItem(ACCOUNT_EQUITY_KEY, el.accountEquity.value);});
+  el.riskPct.addEventListener("change",()=>{localStorage.setItem(RISK_PCT_KEY, el.riskPct.value);});
+  el.resume.addEventListener("click",()=>{state.paused=false;state.pauseReason=null;state.resumeAcknowledged=true;el.resume.disabled=true;if(state.running){tick(true);}});
   el.pair.addEventListener("change",()=>{el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;updateBadge();
     if(state.running){clearTimeout(state.pollTimer);tick();}});
   el.customPair.addEventListener("change",()=>{state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;if(state.running){clearTimeout(state.pollTimer);tick();}});
@@ -1399,6 +1548,13 @@ function initApp(){
   if(storedCapToken) el.capToken.value = normalizeProxyInput(storedCapToken);
   if(storedAutoBacktest !== null){ state.autoBacktest = storedAutoBacktest === "true"; el.autoBacktest.checked = state.autoBacktest; }
   if(storedAutoAi !== null){ state.autoAiLearning = storedAutoAi === "true"; el.autoAi.checked = state.autoAiLearning; }
+  const storedEquity = localStorage.getItem(ACCOUNT_EQUITY_KEY);
+  const storedRiskPct = localStorage.getItem(RISK_PCT_KEY);
+  if(storedEquity !== null){ el.accountEquity.value = storedEquity; }
+  else { el.accountEquity.value = "10000"; }
+  if(storedRiskPct !== null){ el.riskPct.value = storedRiskPct; }
+  else { el.riskPct.value = "1"; }
+  el.resume.disabled = true;
   ChartEngine.size();
   updateAiAssistant();
   tickClock();
