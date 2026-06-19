@@ -615,37 +615,6 @@ function bucketWinRate(obj,key){
   if(!entry || entry.trades < AI_MIN_SAMPLE) return null;
   return entry.wins / entry.trades;
 }
-function calculateConfidenceBase({signal,trend,emaBull,emaBear,macdBull,macdBear,r,volBull,volBear,hasVol,pat,srEvents,nearSupport,nearResistance,higherAgree}){
-  const isBuy = signal === "BUY";
-  const directionMatch = isBuy ? emaBull : emaBear;
-  const macdMatch = isBuy ? macdBull : macdBear;
-  const macdConflict = isBuy ? macdBear : macdBull;
-  const trendMatch = isBuy ? trend === "bullish" : trend === "bearish";
-  const trendConflict = isBuy ? trend === "bearish" : trend === "bullish";
-  const rsiMatch = r !== null && (isBuy ? r > RSI_BUY_THRESHOLD : r < RSI_SELL_THRESHOLD);
-  const volMatch = hasVol && (isBuy ? volBull : volBear);
-  const paMatch = pat.bias === (isBuy ? "bullish" : "bearish");
-  const srMatch = isBuy ? (srEvents.breakout || srEvents.supportBounce) : (srEvents.breakdown || srEvents.resistanceRejection);
-  const zoneMatch = isBuy ? nearSupport : nearResistance;
-  const flatTrend = trend === "neutral";
-
-  let base = 16;
-  base += directionMatch ? 14 : 0;
-  base += trendMatch ? 10 : 0;
-  base += trendConflict ? -10 : 0;
-  base += macdMatch ? 11 : 0;
-  base += macdConflict ? -9 : 0;
-  base += rsiMatch ? 10 : 0;
-  base += volMatch ? 8 : 0;
-  base += paMatch ? 6 : 0;
-  base += srMatch ? 7 : 0;
-  base += zoneMatch ? 4 : 0;
-  base += higherAgree ? 10 : 0;
-  base += flatTrend ? -10 : 0;
-  base += !hasVol ? -4 : 0;
-  base += r === null ? -3 : 0;
-  return Math.max(8, Math.min(96, base));
-}
 function getAiSignalAdjustment(symbol, sessionName, hour, rsiBucket, regime){
   const bucketBonus = (rate, good, bad) => {
     if(rate === null) return 0;
@@ -902,7 +871,6 @@ function predict(candles,opts={}){
 
   if(trend==="neutral"){
     reasons.push("Market is range-bound; trend confirmation is weak");
-    reasons.push("Neutral trend caps confidence at 60%");
   }
   if(hasVol&&volRatio!==null&&volRatio<0.8)reasons.push("Volume is below average; momentum may be weak");
 
@@ -933,31 +901,7 @@ function predict(candles,opts={}){
   const scoreBoost = higherAgree ? 5 : 0;
   const score = Math.max(0, Math.min(100, Math.round(baseScore + scoreBoost)));
 
-  const confidenceBase = calculateConfidenceBase({
-    signal, trend, emaBull, emaBear, macdBull, macdBear, r,
-    volBull, volBear, hasVol, pat, srEvents, nearSupport, nearResistance, higherAgree,
-  });
-  const sessionBoost = sessionName === "London/NY overlap" ? 10
-    : sessionName.startsWith("Asian") ? -10
-    : 0;
-  if(sessionBoost > 0) reasons.push("London/New York overlap adds conviction");
-  if(sessionBoost < 0) reasons.push("Asian session reduces conviction");
-
-  let confidence = confidenceBase + aiBoost + sessionBoost;
-  if(hasVol && volRatio !== null && volRatio < 0.8){
-    confidence -= 10;
-    reasons.push("Volume ratio is below 0.8; momentum is weak");
-  }
-  if(r !== null && signal === "SELL" && r < 20){
-    confidence -= 15;
-    reasons.push("Deep oversold RSI weakens SELL conviction");
-  }
-  if(r !== null && signal === "BUY" && r > 80){
-    confidence -= 15;
-    reasons.push("Deep overbought RSI weakens BUY conviction");
-  }
-  confidence = Math.max(0, Math.min(100, Math.round(confidence)));
-  if(trend === "neutral") confidence = Math.min(confidence, 60);
+  const confidence = signal === "BUY" ? tBuy : tSell;
   const confidenceBucket = confidence >= 80 ? "High" : confidence >= 60 ? "Medium" : "Low";
 
   const adjusted = confidence;
