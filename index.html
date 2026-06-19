@@ -773,13 +773,13 @@ function sumTodaysPnl(curve){
   const todayStr = new Date(today.toLocaleString("en-US",{timeZone:tz})).toDateString();
   return curve.reduce((sum,entry)=>{
     const d = new Date(new Date(entry.time).toLocaleString("en-US",{timeZone:tz}));
-    return d.toDateString()===todayStr ? sum + (entry.pnl||0) : sum;
+    return d.toDateString()===todayStr ? sum + (entry.pnlPct||0) : sum;
   },0);
 }
 function checkCircuitBreaker(state){
   if(state.consecLosses >= MAX_CONSEC_LOSSES) return "Paused: too many consecutive losses. Review before resuming.";
-  const todayPnl = sumTodaysPnl(state.equityCurve);
-  if(todayPnl <= -MAX_DAILY_LOSS_PCT/100 * (Number(el.accountEquity?.value) || 0)) return "Paused: daily loss limit reached.";
+  const todayPnlPct = sumTodaysPnl(state.equityCurve);
+  if(todayPnlPct <= -MAX_DAILY_LOSS_PCT/100) return "Paused: daily loss limit reached.";
   return null;
 }
 function renderPausedState(message){
@@ -1368,7 +1368,7 @@ async function tick(force=false){
 }
 function setStatus(t,live){el.statusText.textContent=t;el.dot.classList.toggle("live",!!live);}
 // ---------- Backtest ----------
-async function runBacktest(opts={mode:"test"}){
+async function runBacktest(opts={mode:"both"}){
   const symbol=activeSymbol();
   el.backtest.innerHTML=`<div style="grid-column:1/-1;color:var(--muted);">Running backtest on ${prettySymbol(symbol)}…</div>`;
   try{
@@ -1415,7 +1415,7 @@ async function runBacktest(opts={mode:"test"}){
     const wr=trades?wins/trades*100:0;
     const pf=gl>0?gp/gl:(gp>0?Infinity:0);
     const avg=trades?eq/trades*100:0;
-    if(opts.mode==="train"){
+    if(opts.mode==="train" || opts.mode=== "both"){
       trainRecords.forEach(rec=>recordAiHistory(symbol, rec.entryTime, rec.sessionName, rec.hour, rec.rsiBucket, rec.regime, rec.signal, rec.win));
       saveAiLearning();
       updateAiAssistant();
@@ -1452,7 +1452,10 @@ function evaluatePendingSignal(closePrice){
   recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome);
   saveAiLearning();
   state.pendingSignal = null;
-  state.equityCurve.push({time:entryTime,pnl: outcome? tp-entryPrice : loss? sl-entryPrice : closePrice-entryPrice});
+  const exitPrice = outcome ? tp : (loss ? sl : closePrice);
+  const pnl = signal === "BUY" ? (exitPrice - entryPrice) : (entryPrice - exitPrice);
+  const pnlPct = pnl / entryPrice;
+  state.equityCurve.push({time: entryTime, pnl, pnlPct});
   if(outcome===false) state.consecLosses++;
   else if(outcome===true) state.consecLosses=0;
 }
@@ -1511,7 +1514,14 @@ function bindUiEvents(){
   });
   el.accountEquity.addEventListener("change",()=>{localStorage.setItem(ACCOUNT_EQUITY_KEY, el.accountEquity.value);});
   el.riskPct.addEventListener("change",()=>{localStorage.setItem(RISK_PCT_KEY, el.riskPct.value);});
-  el.resume.addEventListener("click",()=>{state.paused=false;state.pauseReason=null;state.resumeAcknowledged=true;el.resume.disabled=true;if(state.running){tick(true);}});
+  el.resume.addEventListener("click",()=>{
+    state.paused=false;
+    state.pauseReason=null;
+    state.resumeAcknowledged=true;
+    state.consecLosses=0;
+    el.resume.disabled=true;
+    if(state.running){ tick(true); }
+  });
   el.pair.addEventListener("change",()=>{el.customPair.value="";state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;updateBadge();
     if(state.running){clearTimeout(state.pollTimer);tick();}});
   el.customPair.addEventListener("change",()=>{state.markers=[];state.lastCandleTime=null;state.nextCandleAt=null;state.nextCandleRetryAt=null;state.nextCandleRetryCount=0;state.renderedSignalResult=null;if(state.running){clearTimeout(state.pollTimer);tick();}});
