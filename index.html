@@ -1452,7 +1452,7 @@ function evaluatePendingSignal(closePrice){
   recordAiHistory(symbol, entryTime, sessionName, hour, rsiBucket, regime, signal, outcome);
   saveAiLearning();
   state.pendingSignal = null;
-  const exitPrice = outcome ? tp : (loss ? sl : closePrice);
+  const exitPrice = win ? tp : (loss ? sl : closePrice);
   const pnl = signal === "BUY" ? (exitPrice - entryPrice) : (entryPrice - exitPrice);
   const pnlPct = pnl / entryPrice;
   state.equityCurve.push({time: entryTime, pnl, pnlPct});
