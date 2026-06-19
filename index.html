@@ -1184,7 +1184,7 @@ async function tick(force=false){
     state.candleDuration = duration;
     state.nextCandleAt = computeNextCandleAt(lastCandle.time, duration);
     const progress = Math.max(0, Math.min(1, (now - lastCandle.time) / duration));
-    const readyForSignal = now - lastCandle.time >= Math.max(duration - LIVE_SIGNAL_START_MS, 0);
+    const readyForSignal = true;
 
     if(isNewCandle){
       state.lastCandleTime = lastCandle.time;
@@ -1203,7 +1203,7 @@ async function tick(force=false){
     r.progress = Math.round(progress * 100);
     r.readyForSignal = readyForSignal;
 
-    const shouldRenderSignal = readyForSignal && (!state.renderedSignalResult || state.renderedSignalResult.lastSignalCandle !== lastCandle.time);
+    const shouldRenderSignal = !state.renderedSignalResult || state.renderedSignalResult.lastSignalCandle !== lastCandle.time;
     if(shouldRenderSignal){
       state.lastSignal = r.signal;
       state.lastSignalCandle = lastCandle.time;
