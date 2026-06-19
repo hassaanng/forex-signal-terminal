@@ -297,7 +297,7 @@
       <div class="emo">⚪</div>
       <div class="lbl">—</div>
       <div class="sub">Awaiting first reading</div>
-      <div class="sub countdown" id="next-candle-countdown">Live</div>
+      <div class="sub countdown" id="next-candle-countdown">Next refresh in —:—</div>
       <div class="sub meta" id="candle-progress">Progress: —</div>
       <div class="sub meta" id="time-remaining">Time remaining: —</div>
       <div class="sub meta" id="signal-generated-at">Signal generated at: —</div>
@@ -446,14 +446,20 @@ function updateRefreshCountdown(){
     el.next.textContent = "Paused";
     return;
   }
-  el.next.textContent = "Live";
-}
-function updateNextCandleCountdown(){
-  if(!state.running || !state.nextCandleAt){
-    el.nextCandleCountdown.textContent = "Live";
+  if(!state.nextAt){
+    el.next.textContent = "refreshing…";
     return;
   }
-  el.nextCandleCountdown.textContent = "Live";
+  const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
+  el.next.textContent = `Next refresh in ${seconds}s`;
+}
+function updateNextCandleCountdown(){
+  if(!state.running || !state.nextAt){
+    el.nextCandleCountdown.textContent = "Next refresh in —:—";
+    return;
+  }
+  const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
+  el.nextCandleCountdown.textContent = `Next refresh in ${formatCountdown(seconds * 1000)}`;
 }
 function formatAge(ms){
   if(ms==null||ms<0) return "—";
