@@ -451,7 +451,7 @@ function updateRefreshCountdown(){
     return;
   }
   const seconds = Math.max(0, Math.ceil((state.nextAt - Date.now()) / 1000));
-  const label = state.nextEventType === "candle" ? "next candle" : state.nextEventType === "signal" ? "next signal" : "next refresh";
+  const label = state.nextEventType === "candle" ? "next candle" : "next refresh";
   el.next.textContent = `${label} in ${seconds}s`;
 }
 function updateNextCandleCountdown(){
@@ -1237,7 +1237,7 @@ async function tick(force=false){
   }
   if(state.running){
       if(state.lastFetchAt){
-        state.nextEventType = "signal";
+        state.nextEventType = "refresh";
         state.nextAt = state.lastFetchAt + state.refresh * 1000;
       }
       updateCountdown();
